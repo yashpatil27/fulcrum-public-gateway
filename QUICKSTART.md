@@ -21,7 +21,7 @@ This will:
 
 1. **Clone this repo on your VPS:**
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/yashpatil27/electrs-public-gateway.git
 cd electrs_pub
 ```
 
