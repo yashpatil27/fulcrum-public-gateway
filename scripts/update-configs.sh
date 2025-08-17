@@ -1,45 +1,80 @@
 #!/bin/bash
 
-# Configuration Update Script
-echo "🔄 Updating Configurations"
-echo "=========================="
+# Get the directory of this script
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
-# Check if we're on home server or VPS
-if [ -f "$HOME/.config/electrs-pub/config" ]; then
-    echo "📍 Detected: Home Server"
-    
-    echo "Updating tunnel service configuration..."
-    source "$HOME/.config/electrs-pub/config"
-    
-    # Restart tunnel service to pick up any changes
-    if systemctl is-active --quiet "$SERVICE_NAME"; then
-        echo "Restarting tunnel service..."
-        sudo systemctl restart "$SERVICE_NAME"
-        sleep 3
-        ./scripts/tunnel-status.sh
-    else
-        echo "Tunnel service is not running"
-    fi
-    
-elif command -v nginx >/dev/null 2>&1; then
-    echo "📍 Detected: VPS Server"
-    
-    echo "Testing nginx configuration..."
-    if nginx -t; then
-        echo "✅ Nginx configuration is valid"
-        echo "Reloading nginx..."
-        systemctl reload nginx
-        ./scripts/vps-status.sh
-    else
-        echo "❌ Nginx configuration error - not reloading"
-        exit 1
-    fi
-    
+# Source configuration
+if [ -f "$PROJECT_ROOT/config.env" ]; then
+    source "$PROJECT_ROOT/config.env"
 else
-    echo "❌ Could not determine server type"
-    echo "Run this script on either the home server or VPS"
+    echo "❌ Configuration file not found: $PROJECT_ROOT/config.env"
     exit 1
 fi
 
-echo ""
-echo "✅ Configuration update complete"
+echo "🔄 Updating Configurations"
+echo "========================="
+
+# Check if we're on home server or VPS
+if [ -f "/etc/systemd/system/$SERVICE_NAME.service" ]; then
+    print_info "Detected: Home Server"
+    
+    # Update git repository
+    print_info "Pulling latest changes..."
+    cd "$PROJECT_ROOT"
+    if git pull; then
+        print_success "Repository updated successfully"
+    else
+        print_warning "Git pull failed or no changes available"
+    fi
+    
+    # Restart tunnel service if it's running
+    if systemctl is-active --quiet $SERVICE_NAME; then
+        print_info "Restarting tunnel service..."
+        sudo systemctl restart $SERVICE_NAME
+        
+        if systemctl is-active --quiet $SERVICE_NAME; then
+            print_success "Service restarted successfully"
+        else
+            print_error "Service restart failed"
+        fi
+    fi
+    
+elif [ -f "$NGINX_CONFIG" ]; then
+    print_info "Detected: VPS Server"
+    
+    # Update git repository
+    print_info "Pulling latest changes..."
+    cd "$PROJECT_ROOT"
+    if git pull; then
+        print_success "Repository updated successfully"
+    else
+        print_warning "Git pull failed or no changes available"
+    fi
+    
+    # Test nginx configuration
+    print_info "Testing nginx configuration..."
+    if nginx -t; then
+        print_success "Nginx configuration is valid"
+        
+        # Reload nginx
+        print_info "Reloading nginx..."
+        if systemctl reload nginx; then
+            print_success "Nginx reloaded successfully"
+        else
+            print_error "Nginx reload failed"
+        fi
+    else
+        print_error "Nginx configuration test failed"
+        print_error "Please check your configuration"
+    fi
+    
+else
+    print_info "Server type not detected"
+    print_info "Pulling latest changes..."
+    cd "$PROJECT_ROOT"
+    git pull
+fi
+
+print_success "Configuration update completed"
+

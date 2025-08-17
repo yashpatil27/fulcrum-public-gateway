@@ -1,68 +1,81 @@
 #!/bin/bash
 
-# VPS Logs Viewer
-DOMAIN="electrs.bittrade.co.in"
+# Get the directory of this script
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+
+# Source configuration
+if [ -f "$PROJECT_ROOT/config.env" ]; then
+    source "$PROJECT_ROOT/config.env"
+else
+    echo "❌ Configuration file not found: $PROJECT_ROOT/config.env"
+    exit 1
+fi
 
 echo "📋 VPS Logs Viewer"
 echo "=================="
 echo ""
 
 # Show options
-echo "Available logs:"
-echo "1. Nginx access logs"
-echo "2. Nginx error logs"
-echo "3. SSL certificate logs"
-echo "4. System logs for nginx"
-echo "5. Live tail all logs"
+echo "Available log files:"
+echo "1. Nginx Access Log ($NGINX_ACCESS_LOG)"
+echo "2. Nginx Error Log ($NGINX_ERROR_LOG)"
+echo "3. System Log (journalctl -n 50)"
+echo "4. SSL/Certbot Log"
+echo "5. Live tail - Access Log"
+echo "6. Live tail - Error Log"
 echo ""
 
-read -p "Select log to view (1-5): " choice
+read -p "Select option (1-6): " choice
 
 case $choice in
     1)
-        echo "📊 Nginx Access Logs:"
-        echo "===================="
-        if [ -f "/var/log/nginx/$DOMAIN.access.log" ]; then
-            tail -n 50 "/var/log/nginx/$DOMAIN.access.log"
+        print_info "Nginx Access Log (last 50 lines):"
+        if [ -f "$NGINX_ACCESS_LOG" ]; then
+            tail -n 50 "$NGINX_ACCESS_LOG"
         else
-            echo "Access log not found at /var/log/nginx/$DOMAIN.access.log"
-            echo "Checking default location..."
-            tail -n 50 /var/log/nginx/access.log | grep "$DOMAIN" || echo "No entries found"
+            print_error "Access log not found: $NGINX_ACCESS_LOG"
         fi
         ;;
     2)
-        echo "🚨 Nginx Error Logs:"
-        echo "==================="
-        if [ -f "/var/log/nginx/$DOMAIN.error.log" ]; then
-            tail -n 50 "/var/log/nginx/$DOMAIN.error.log"
+        print_info "Nginx Error Log (last 50 lines):"
+        if [ -f "$NGINX_ERROR_LOG" ]; then
+            tail -n 50 "$NGINX_ERROR_LOG"
         else
-            echo "Error log not found at /var/log/nginx/$DOMAIN.error.log"
-            echo "Checking default location..."
-            tail -n 50 /var/log/nginx/error.log
+            print_error "Error log not found: $NGINX_ERROR_LOG"
         fi
         ;;
     3)
-        echo "🔐 SSL Certificate Logs:"
-        echo "======================="
-        journalctl -u certbot --no-pager -n 30
+        print_info "System Log (last 50 lines):"
+        journalctl -n 50 --no-pager
         ;;
     4)
-        echo "🔧 System Logs (Nginx):"
-        echo "======================"
-        journalctl -u nginx --no-pager -n 30
+        print_info "SSL/Certbot Log:"
+        if [ -f "/var/log/letsencrypt/letsencrypt.log" ]; then
+            tail -n 30 /var/log/letsencrypt/letsencrypt.log
+        else
+            print_error "Certbot log not found"
+        fi
         ;;
     5)
-        echo "👀 Live Tail (Ctrl+C to exit):"
-        echo "==============================="
-        echo "Tailing access logs, error logs, and nginx service..."
-        (
-            tail -f "/var/log/nginx/$DOMAIN.access.log" 2>/dev/null &
-            tail -f "/var/log/nginx/$DOMAIN.error.log" 2>/dev/null &
-            journalctl -u nginx -f &
-            wait
-        )
+        print_info "Live tail - Access Log (Ctrl+C to exit):"
+        if [ -f "$NGINX_ACCESS_LOG" ]; then
+            tail -f "$NGINX_ACCESS_LOG"
+        else
+            print_error "Access log not found: $NGINX_ACCESS_LOG"
+        fi
+        ;;
+    6)
+        print_info "Live tail - Error Log (Ctrl+C to exit):"
+        if [ -f "$NGINX_ERROR_LOG" ]; then
+            tail -f "$NGINX_ERROR_LOG"
+        else
+            print_error "Error log not found: $NGINX_ERROR_LOG"
+        fi
         ;;
     *)
-        echo "Invalid choice"
+        print_error "Invalid option"
+        exit 1
         ;;
 esac
+

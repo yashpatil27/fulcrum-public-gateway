@@ -1,19 +1,27 @@
 #!/bin/bash
 
-source "$HOME/.config/electrs-pub/config" 2>/dev/null || {
-    echo "❌ Configuration not found. Run home-server/setup.sh first."
+# Get the directory of this script
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+
+# Source configuration
+if [ -f "$PROJECT_ROOT/config.env" ]; then
+    source "$PROJECT_ROOT/config.env"
+else
+    echo "❌ Configuration file not found: $PROJECT_ROOT/config.env"
     exit 1
-}
+fi
 
 echo "🛑 Stopping Electrs Tunnel"
-echo "=========================="
+echo "========================="
 
-sudo systemctl stop "$SERVICE_NAME"
-sleep 2
+print_info "Stopping service: $SERVICE_NAME"
 
-if ! systemctl is-active --quiet "$SERVICE_NAME"; then
-    echo "✅ Tunnel stopped successfully"
+# Stop the service
+if sudo systemctl stop $SERVICE_NAME; then
+    print_success "Service stopped successfully"
 else
-    echo "❌ Failed to stop tunnel"
-    systemctl status "$SERVICE_NAME"
+    print_error "Failed to stop service"
+    exit 1
 fi
+

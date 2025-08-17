@@ -1,99 +1,112 @@
 #!/bin/bash
 
-# VPS Status Check Script
+# Get the directory of this script
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+
+# Source configuration
+if [ -f "$PROJECT_ROOT/config.env" ]; then
+    source "$PROJECT_ROOT/config.env"
+else
+    echo "❌ Configuration file not found: $PROJECT_ROOT/config.env"
+    exit 1
+fi
+
 echo "☁️  VPS Status Check"
 echo "==================="
 
-DOMAIN="electrs.bittrade.co.in"
+print_info "Checking domain: $DOMAIN"
 
 # Check nginx status
 echo "Nginx Status:"
 if systemctl is-active --quiet nginx; then
-    echo "✅ Nginx is running"
+    print_success "Nginx is running"
 else
-    echo "❌ Nginx is not running"
-    echo "   Start with: sudo systemctl start nginx"
+    print_error "Nginx is not running"
 fi
 
-# Check if site is enabled
+# Check nginx configuration
 echo ""
-echo "Site Configuration:"
-if [ -f "/etc/nginx/sites-enabled/$DOMAIN" ]; then
-    echo "✅ Site is enabled"
+echo "Nginx Configuration:"
+if [ -f "$NGINX_CONFIG" ]; then
+    print_success "Nginx config exists: $NGINX_CONFIG"
+    if nginx -t 2>/dev/null; then
+        print_success "Nginx configuration is valid"
+    else
+        print_error "Nginx configuration has errors"
+    fi
 else
-    echo "❌ Site is not enabled"
-    echo "   Enable with: sudo ln -s /etc/nginx/sites-available/$DOMAIN /etc/nginx/sites-enabled/"
+    print_error "Nginx config not found: $NGINX_CONFIG"
 fi
 
 # Check SSL certificate
 echo ""
 echo "SSL Certificate:"
-if [ -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ]; then
-    echo "✅ SSL certificate exists"
+if [ -f "$SSL_CERT_PATH" ]; then
+    print_success "SSL certificate exists"
     
-    # Check expiry
-    EXPIRY=$(openssl x509 -in "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" -noout -enddate | cut -d= -f2)
-    EXPIRY_EPOCH=$(date -d "$EXPIRY" +%s)
-    CURRENT_EPOCH=$(date +%s)
-    DAYS_UNTIL_EXPIRY=$(( (EXPIRY_EPOCH - CURRENT_EPOCH) / 86400 ))
-    
-    if [ $DAYS_UNTIL_EXPIRY -gt 30 ]; then
-        echo "✅ Certificate expires in $DAYS_UNTIL_EXPIRY days ($EXPIRY)"
-    elif [ $DAYS_UNTIL_EXPIRY -gt 7 ]; then
-        echo "⚠️  Certificate expires in $DAYS_UNTIL_EXPIRY days ($EXPIRY)"
-    else
-        echo "❌ Certificate expires soon: $DAYS_UNTIL_EXPIRY days ($EXPIRY)"
-        echo "   Renew with: ./scripts/renew-ssl.sh"
+    # Check certificate expiry
+    EXPIRY_DATE=$(openssl x509 -enddate -noout -in "$SSL_CERT_PATH" 2>/dev/null | cut -d= -f2)
+    if [ -n "$EXPIRY_DATE" ]; then
+        EXPIRY_EPOCH=$(date -d "$EXPIRY_DATE" +%s 2>/dev/null || echo "0")
+        CURRENT_EPOCH=$(date +%s)
+        DAYS_LEFT=$(( (EXPIRY_EPOCH - CURRENT_EPOCH) / 86400 ))
+        
+        if [ $DAYS_LEFT -gt 30 ]; then
+            print_success "Certificate expires in $DAYS_LEFT days"
+        elif [ $DAYS_LEFT -gt 0 ]; then
+            print_warning "Certificate expires in $DAYS_LEFT days (consider renewal)"
+        else
+            print_error "Certificate has expired!"
+        fi
     fi
 else
-    echo "❌ SSL certificate not found"
-    echo "   Install with: sudo certbot --nginx -d $DOMAIN"
+    print_error "SSL certificate not found: $SSL_CERT_PATH"
 fi
 
-# Check port 50005 connectivity (from tunnel)
+# Check port connectivity (from tunnel)
 echo ""
-echo "Tunnel Connection:"
-if timeout 3 bash -c "</dev/tcp/127.0.0.1/50005" 2>/dev/null; then
-    echo "✅ Can connect to port 50005 (tunnel working)"
+echo "Port Connectivity:"
+if timeout 3 bash -c "</dev/tcp/127.0.0.1/$ELECTRS_PORT" 2>/dev/null; then
+    print_success "Can connect to port $ELECTRS_PORT (tunnel working)"
 else
-    echo "❌ Cannot connect to port 50005"
-    echo "   Check if home server tunnel is connected"
+    print_error "Cannot connect to port $ELECTRS_PORT"
+    echo "   This usually means the SSH tunnel is not connected"
 fi
 
-# Check external connectivity
+# Check domain resolution
 echo ""
-echo "External Access:"
-if curl -s -I "https://$DOMAIN/health" | head -n1 | grep -q "200 OK"; then
-    echo "✅ Domain is accessible externally"
+echo "Domain Resolution:"
+DOMAIN_IP=$(dig +short $DOMAIN 2>/dev/null | tail -n1)
+SERVER_IP=$(curl -s --connect-timeout 5 ipinfo.io/ip 2>/dev/null || echo "unknown")
+
+if [ -n "$DOMAIN_IP" ]; then
+    print_success "Domain resolves to: $DOMAIN_IP"
+    if [ "$DOMAIN_IP" = "$SERVER_IP" ]; then
+        print_success "Domain points to this server"
+    else
+        print_warning "Domain points to $DOMAIN_IP, this server is $SERVER_IP"
+    fi
 else
-    echo "❌ Domain is not accessible or returning errors"
-    echo "   Test manually: curl -I https://$DOMAIN/health"
+    print_error "Domain does not resolve"
 fi
 
 # Check firewall status
 echo ""
 echo "Firewall Status:"
 if command -v ufw >/dev/null && ufw status | grep -q "Status: active"; then
-    echo "✅ Firewall is active"
+    print_success "UFW firewall is active"
     echo "Open ports:"
-    ufw status | grep ALLOW
+    ufw status | grep ALLOW | head -5
 else
-    echo "⚠️  Firewall status unclear or inactive"
+    print_warning "UFW firewall not active or not installed"
 fi
 
-# Show recent nginx access logs
+# Recent nginx logs
 echo ""
-echo "Recent Access (last 5 entries):"
-if [ -f "/var/log/nginx/$DOMAIN.access.log" ]; then
-    tail -n 5 "/var/log/nginx/$DOMAIN.access.log"
-elif [ -f "/var/log/nginx/access.log" ]; then
-    tail -n 5 "/var/log/nginx/access.log" | grep "$DOMAIN"
-else
-    echo "No access logs found"
+echo "Recent Activity:"
+if [ -f "$NGINX_ACCESS_LOG" ]; then
+    echo "Last 5 access log entries:"
+    tail -n 5 "$NGINX_ACCESS_LOG" 2>/dev/null || echo "No recent access logs"
 fi
 
-echo ""
-echo "Commands:"
-echo "  View nginx logs: ./scripts/vps-logs.sh"
-echo "  Renew SSL cert: ./scripts/renew-ssl.sh"
-echo "  Test connection: curl -I https://$DOMAIN/health"

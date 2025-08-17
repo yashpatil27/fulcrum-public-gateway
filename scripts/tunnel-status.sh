@@ -1,58 +1,76 @@
 #!/bin/bash
 
-# Check SSH tunnel status
-source "$HOME/.config/electrs-pub/config" 2>/dev/null || {
-    echo "❌ Configuration not found. Run home-server/setup.sh first."
+# Get the directory of this script
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+
+# Source configuration
+if [ -f "$PROJECT_ROOT/config.env" ]; then
+    source "$PROJECT_ROOT/config.env"
+else
+    echo "❌ Configuration file not found: $PROJECT_ROOT/config.env"
     exit 1
-}
+fi
+
+# Check if runtime config exists (created by setup.sh)
+RUNTIME_CONFIG="$PROJECT_ROOT/.electrs_config"
+if [ -f "$RUNTIME_CONFIG" ]; then
+    source "$RUNTIME_CONFIG"
+fi
 
 echo "🔍 Electrs Tunnel Status Check"
 echo "=============================="
 
+print_info "Configuration:"
+print_info "  Service: $SERVICE_NAME"
+print_info "  Domain: $DOMAIN"
+print_info "  Port: $ELECTRS_PORT"
+
 # Check systemd service status
+echo ""
 echo "Service Status:"
-if systemctl is-active --quiet "$SERVICE_NAME"; then
-    echo "✅ Service is running"
+if systemctl is-active --quiet $SERVICE_NAME; then
+    print_success "Service $SERVICE_NAME is active"
+    
+    # Get service details
+    echo ""
+    echo "Service Details:"
+    systemctl status $SERVICE_NAME --no-pager -l | head -15
+    
+    # Check if tunnel is actually working
+    echo ""
+    echo "Tunnel Connection Test:"
+    if pgrep -f "ssh.*$ELECTRS_PORT.*$VPS_HOST" > /dev/null; then
+        print_success "SSH tunnel process is running"
+        echo "   Process: $(pgrep -f "ssh.*$ELECTRS_PORT.*$VPS_HOST" | head -1)"
+    else
+        print_warning "SSH tunnel process not found"
+    fi
+    
 else
-    echo "❌ Service is not running"
-    echo "   Start with: sudo systemctl start $SERVICE_NAME"
+    print_error "Service $SERVICE_NAME is not active"
+    echo ""
+    echo "Recent logs:"
+    journalctl -u $SERVICE_NAME --no-pager -l -n 10
 fi
 
-# Check if SSH connection is active
+# Check SSH key
 echo ""
-echo "SSH Connection:"
-if pgrep -f "ssh.*$VPS_HOST.*$ELECTRS_PORT:127.0.0.1:$ELECTRS_PORT" >/dev/null; then
-    echo "✅ SSH tunnel process is running"
+echo "SSH Configuration:"
+if [ -f "$SSH_KEY_PATH" ]; then
+    print_success "SSH key exists: $SSH_KEY_PATH"
 else
-    echo "❌ SSH tunnel process not found"
+    print_error "SSH key not found: $SSH_KEY_PATH"
 fi
 
-# Check if port is being forwarded
-echo ""
-echo "Port Check:"
-if ss -tlnp | grep -q ":$ELECTRS_PORT.*ssh" 2>/dev/null; then
-    echo "✅ Port $ELECTRS_PORT appears to be forwarded"
-else
-    echo "⚠️  Port $ELECTRS_PORT forwarding status unclear"
+# Test VPS connection if configured
+if [ -n "$VPS_HOST" ] && [ -n "$VPS_USER" ]; then
+    echo ""
+    echo "VPS Connection Test:"
+    if ssh -i "$SSH_KEY_PATH" -o BatchMode=yes -o ConnectTimeout=5 "${VPS_USER}@${VPS_HOST}" exit 2>/dev/null; then
+        print_success "Can connect to VPS: ${VPS_USER}@${VPS_HOST}"
+    else
+        print_error "Cannot connect to VPS: ${VPS_USER}@${VPS_HOST}"
+    fi
 fi
 
-# Check electrs local availability
-echo ""
-echo "Local Electrs:"
-if timeout 3 bash -c "</dev/tcp/127.0.0.1/$ELECTRS_PORT" 2>/dev/null; then
-    echo "✅ Electrs is reachable locally on port $ELECTRS_PORT"
-else
-    echo "❌ Electrs is not reachable on port $ELECTRS_PORT"
-    echo "   Check if electrs is running: ./scripts/check-electrs.sh"
-fi
-
-# Recent log entries
-echo ""
-echo "Recent Tunnel Logs:"
-journalctl -u "$SERVICE_NAME" --no-pager -n 5 --output=short
-
-echo ""
-echo "Commands:"
-echo "  View live logs: journalctl -u $SERVICE_NAME -f"
-echo "  Restart tunnel: ./scripts/tunnel-restart.sh"
-echo "  Check electrs:  ./scripts/check-electrs.sh"

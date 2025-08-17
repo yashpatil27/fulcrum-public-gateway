@@ -1,67 +1,73 @@
 #!/bin/bash
 
-# SSL Certificate Renewal Script
-DOMAIN="electrs.bittrade.co.in"
+# Get the directory of this script
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+
+# Source configuration
+if [ -f "$PROJECT_ROOT/config.env" ]; then
+    source "$PROJECT_ROOT/config.env"
+else
+    echo "❌ Configuration file not found: $PROJECT_ROOT/config.env"
+    exit 1
+fi
 
 echo "🔐 SSL Certificate Renewal"
 echo "=========================="
 
 # Check if running as root
 if [ "$EUID" -ne 0 ]; then
-    echo "❌ This script must be run as root or with sudo"
+    print_error "This script must be run as root or with sudo"
     exit 1
 fi
 
-echo "Checking current certificate status..."
-if [ -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ]; then
-    EXPIRY=$(openssl x509 -in "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" -noout -enddate | cut -d= -f2)
-    EXPIRY_EPOCH=$(date -d "$EXPIRY" +%s)
-    CURRENT_EPOCH=$(date +%s)
-    DAYS_UNTIL_EXPIRY=$(( (EXPIRY_EPOCH - CURRENT_EPOCH) / 86400 ))
-    
-    echo "Current certificate expires in $DAYS_UNTIL_EXPIRY days ($EXPIRY)"
-    
-    if [ $DAYS_UNTIL_EXPIRY -gt 30 ]; then
-        echo "⚠️  Certificate doesn't need renewal yet (>30 days remaining)"
-        read -p "Continue anyway? (y/N): " -n 1 -r
-        echo
-        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-            exit 0
-        fi
+print_info "Renewing SSL certificate for: $DOMAIN"
+
+# Check current certificate status
+if [ -f "$SSL_CERT_PATH" ]; then
+    print_info "Current certificate status:"
+    EXPIRY_DATE=$(openssl x509 -enddate -noout -in "$SSL_CERT_PATH" 2>/dev/null | cut -d= -f2)
+    if [ -n "$EXPIRY_DATE" ]; then
+        echo "  Expires: $EXPIRY_DATE"
+        
+        EXPIRY_EPOCH=$(date -d "$EXPIRY_DATE" +%s 2>/dev/null || echo "0")
+        CURRENT_EPOCH=$(date +%s)
+        DAYS_LEFT=$(( (EXPIRY_EPOCH - CURRENT_EPOCH) / 86400 ))
+        
+        echo "  Days remaining: $DAYS_LEFT"
     fi
 else
-    echo "❌ No certificate found. Will attempt to obtain new certificate."
+    print_warning "Certificate file not found: $SSL_CERT_PATH"
 fi
 
+# Attempt to renew certificate
 echo ""
-echo "Attempting to renew certificate..."
-certbot renew --nginx --force-renewal
+print_info "Attempting certificate renewal..."
 
-if [ $? -eq 0 ]; then
-    echo ""
-    echo "✅ Certificate renewal completed successfully"
-    echo "Reloading nginx..."
-    systemctl reload nginx
+if certbot renew --nginx --quiet; then
+    print_success "Certificate renewal completed successfully"
     
+    # Reload nginx to use new certificate
+    print_info "Reloading nginx..."
+    if systemctl reload nginx; then
+        print_success "Nginx reloaded successfully"
+    else
+        print_error "Failed to reload nginx"
+    fi
+    
+    # Show new certificate status
     echo ""
-    echo "New certificate info:"
-    EXPIRY=$(openssl x509 -in "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" -noout -enddate | cut -d= -f2)
-    echo "Expires: $EXPIRY"
+    print_info "New certificate status:"
+    if [ -f "$SSL_CERT_PATH" ]; then
+        NEW_EXPIRY_DATE=$(openssl x509 -enddate -noout -in "$SSL_CERT_PATH" 2>/dev/null | cut -d= -f2)
+        if [ -n "$NEW_EXPIRY_DATE" ]; then
+            echo "  New expiry: $NEW_EXPIRY_DATE"
+        fi
+    fi
+    
 else
-    echo ""
-    echo "❌ Certificate renewal failed"
-    echo "Check the logs above for details"
-    echo ""
-    echo "You can also try:"
-    echo "  certbot --nginx -d $DOMAIN"
-    echo "  certbot certificates"
+    print_error "Certificate renewal failed"
+    print_error "Check certbot logs: /var/log/letsencrypt/letsencrypt.log"
     exit 1
 fi
 
-echo ""
-echo "Testing renewed certificate..."
-if curl -s -I "https://$DOMAIN/health" | head -n1 | grep -q "200 OK"; then
-    echo "✅ HTTPS is working with renewed certificate"
-else
-    echo "⚠️  HTTPS test failed - check nginx configuration"
-fi

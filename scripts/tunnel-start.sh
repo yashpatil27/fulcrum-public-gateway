@@ -1,23 +1,36 @@
 #!/bin/bash
 
-source "$HOME/.config/electrs-pub/config" 2>/dev/null || {
-    echo "❌ Configuration not found. Run home-server/setup.sh first."
+# Get the directory of this script
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+
+# Source configuration
+if [ -f "$PROJECT_ROOT/config.env" ]; then
+    source "$PROJECT_ROOT/config.env"
+else
+    echo "❌ Configuration file not found: $PROJECT_ROOT/config.env"
     exit 1
-}
+fi
 
 echo "🚀 Starting Electrs Tunnel"
 echo "=========================="
 
-sudo systemctl start "$SERVICE_NAME"
-sleep 2
+print_info "Starting service: $SERVICE_NAME"
 
-if systemctl is-active --quiet "$SERVICE_NAME"; then
-    echo "✅ Tunnel started successfully"
-    echo ""
-    ./scripts/tunnel-status.sh
+# Start the service
+if sudo systemctl start $SERVICE_NAME; then
+    print_success "Service started successfully"
+    
+    # Wait a moment and check status
+    sleep 2
+    if systemctl is-active --quiet $SERVICE_NAME; then
+        print_success "Service is running"
+    else
+        print_error "Service failed to start properly"
+        echo "Check logs with: journalctl -u $SERVICE_NAME -f"
+    fi
 else
-    echo "❌ Failed to start tunnel"
-    echo ""
-    echo "Check logs:"
-    journalctl -u "$SERVICE_NAME" --no-pager -n 10
+    print_error "Failed to start service"
+    exit 1
 fi
+

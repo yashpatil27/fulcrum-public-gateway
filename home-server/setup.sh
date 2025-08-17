@@ -3,95 +3,88 @@
 # Electrs Public Gateway - Home Server Setup Script
 set -e
 
-echo "🏠 Setting up Electrs Public Gateway - Home Server"
-echo "=================================================="
+# Get the directory of this script
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
-
-# Configuration
-SSH_KEY_PATH="$HOME/.ssh/electrs_tunnel"
-SERVICE_NAME="electrs-tunnel"
-ELECTRS_PORT="50005"
-
-# Function to print colored output
-print_status() {
-    echo -e "${GREEN}[INFO]${NC} $1"
-}
-
-print_warning() {
-    echo -e "${YELLOW}[WARN]${NC} $1"
-}
-
-print_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
-}
-
-# Check if electrs is configured
-print_status "Checking electrs configuration..."
-if [ ! -f "$HOME/.electrs/config.toml" ]; then
-    print_error "Electrs configuration not found at $HOME/.electrs/config.toml"
-    print_error "Please ensure electrs is properly installed and configured first."
+# Source configuration
+if [ -f "$PROJECT_ROOT/config.env" ]; then
+    source "$PROJECT_ROOT/config.env"
+else
+    echo "❌ Configuration file not found: $PROJECT_ROOT/config.env"
+    echo "Please ensure config.env exists in the project root directory."
     exit 1
 fi
 
-# Verify electrs is configured for port 50005
-if ! grep -q "electrum_rpc_addr.*50005" "$HOME/.electrs/config.toml"; then
-    print_warning "Electrs doesn't appear to be configured for port 50005"
-    print_warning "Current electrs config:"
-    cat "$HOME/.electrs/config.toml"
-    echo ""
-    read -p "Do you want to continue anyway? (y/N): " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        exit 1
-    fi
+echo "🏠 Setting up Electrs Public Gateway - Home Server"
+echo "=================================================="
+
+print_info "Using configuration:"
+print_info "  Domain: $DOMAIN"
+print_info "  Electrs Port: $ELECTRS_PORT"
+print_info "  Service Name: $SERVICE_NAME"
+print_info "  SSH Key Path: $SSH_KEY_PATH"
+
+# Check if electrs is configured
+print_info "Checking electrs configuration..."
+if [ ! -f "$ELECTRS_CONFIG_PATH" ]; then
+    print_error "Electrs config not found at $ELECTRS_CONFIG_PATH"
+    print_error "Please install and configure electrs first."
+    exit 1
+fi
+
+# Verify electrs is configured for the correct port
+if ! grep -q "electrum_rpc_addr.*$ELECTRS_PORT" "$ELECTRS_CONFIG_PATH"; then
+    print_warning "Electrs may not be configured for port $ELECTRS_PORT"
+    print_warning "Please verify your electrs configuration."
+fi
+
+# Check if electrs is running
+if ! pgrep -f electrs > /dev/null; then
+    print_warning "Electrs is not currently running"
+    print_warning "Please start electrs before continuing"
 fi
 
 # Get VPS connection details
 echo ""
-print_status "VPS Connection Setup"
 echo "Please provide your VPS connection details:"
-read -p "VPS IP address or hostname: " VPS_HOST
-read -p "VPS username: " VPS_USER
-read -p "VPS SSH port (default 22): " VPS_PORT
-VPS_PORT=${VPS_PORT:-22}
-
 echo ""
-print_status "Creating SSH key for tunnel..."
 
+read -p "VPS hostname or IP: " VPS_HOST
+read -p "VPS username (e.g., root): " VPS_USER
+
+# Update the config file with VPS details
+print_info "Saving VPS configuration..."
+sed -i "s/^VPS_HOST=.*/VPS_HOST=\"$VPS_HOST\"/" "$PROJECT_ROOT/config.env"
+sed -i "s/^VPS_USER=.*/VPS_USER=\"$VPS_USER\"/" "$PROJECT_ROOT/config.env"
+
+print_info "Generating SSH keys..."
 # Generate SSH key if it doesn't exist
 if [ ! -f "$SSH_KEY_PATH" ]; then
-    ssh-keygen -t ed25519 -f "$SSH_KEY_PATH" -N "" -C "electrs-tunnel@$(hostname)"
-    print_status "SSH key generated: $SSH_KEY_PATH"
+    print_info "Generating new SSH key..."
+    ssh-keygen -t ed25519 -f "$SSH_KEY_PATH" -N "" -C "${SSH_KEY_NAME}@$(hostname)"
+    print_success "SSH key generated at $SSH_KEY_PATH"
 else
-    print_warning "SSH key already exists: $SSH_KEY_PATH"
+    print_info "SSH key already exists at $SSH_KEY_PATH"
 fi
 
 # Copy SSH key to VPS
-print_status "Copying SSH key to VPS..."
+print_info "Installing SSH key on VPS..."
 echo "You will be prompted for your VPS password:"
-ssh-copy-id -i "$SSH_KEY_PATH.pub" -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" || {
-    print_error "Failed to copy SSH key to VPS"
-    print_error "Please manually copy the key:"
-    echo "ssh-copy-id -i $SSH_KEY_PATH.pub -p $VPS_PORT $VPS_USER@$VPS_HOST"
-    exit 1
-}
+ssh-copy-id -i "${SSH_KEY_PATH}.pub" "${VPS_USER}@${VPS_HOST}"
 
-print_status "Testing SSH connection..."
-if ssh -i "$SSH_KEY_PATH" -p "$VPS_PORT" -o ConnectTimeout=10 -o BatchMode=yes "$VPS_USER@$VPS_HOST" "echo 'SSH connection successful'" >/dev/null 2>&1; then
-    print_status "SSH key authentication successful"
+# Test SSH connection
+print_info "Testing SSH connection..."
+if ssh -i "$SSH_KEY_PATH" -o BatchMode=yes -o ConnectTimeout=10 "${VPS_USER}@${VPS_HOST}" exit 2>/dev/null; then
+    print_success "SSH key authentication working"
 else
     print_error "SSH key authentication failed"
     exit 1
 fi
 
 # Create systemd service file
-print_status "Creating systemd service..."
-sudo tee "/etc/systemd/system/$SERVICE_NAME.service" > /dev/null << SYSTEMD_EOF
+print_info "Creating systemd service..."
+sudo tee /etc/systemd/system/${SERVICE_NAME}.service > /dev/null << SERVICEEOF
 [Unit]
 Description=Electrs SSH Tunnel to VPS
 After=network.target
@@ -99,8 +92,8 @@ Wants=network.target
 
 [Service]
 Type=simple
-User=$USER
-ExecStart=/usr/bin/ssh -i $SSH_KEY_PATH -p $VPS_PORT -R $ELECTRS_PORT:127.0.0.1:$ELECTRS_PORT -o ServerAliveInterval=60 -o ServerAliveCountMax=3 -o ExitOnForwardFailure=yes -o StrictHostKeyChecking=no $VPS_USER@$VPS_HOST -N
+User=$(whoami)
+ExecStart=/usr/bin/ssh -i $SSH_KEY_PATH -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -o ExitOnForwardFailure=yes -N -R $ELECTRS_PORT:localhost:$ELECTRS_PORT ${VPS_USER}@${VPS_HOST}
 Restart=always
 RestartSec=10
 StandardOutput=journal
@@ -108,46 +101,53 @@ StandardError=journal
 
 [Install]
 WantedBy=multi-user.target
-SYSTEMD_EOF
+SERVICEEOF
 
 # Reload systemd and enable service
-print_status "Enabling and starting tunnel service..."
+print_info "Enabling systemd service..."
 sudo systemctl daemon-reload
-sudo systemctl enable "$SERVICE_NAME"
-sudo systemctl start "$SERVICE_NAME"
+sudo systemctl enable ${SERVICE_NAME}.service
+
+# Start the service
+print_info "Starting tunnel service..."
+sudo systemctl start ${SERVICE_NAME}.service
+
+# Wait a moment for service to start
+sleep 2
 
 # Check service status
-sleep 2
-if sudo systemctl is-active --quiet "$SERVICE_NAME"; then
-    print_status "Tunnel service started successfully"
+if sudo systemctl is-active --quiet ${SERVICE_NAME}.service; then
+    print_success "Tunnel service started successfully"
 else
     print_error "Tunnel service failed to start"
-    print_error "Check logs with: journalctl -u $SERVICE_NAME -f"
+    print_error "Check logs with: journalctl -u ${SERVICE_NAME} -f"
     exit 1
 fi
 
 # Create configuration file for scripts
-mkdir -p "$HOME/.config/electrs-pub"
-cat > "$HOME/.config/electrs-pub/config" << CONFIG_EOF
+CONFIG_FILE="$PROJECT_ROOT/.electrs_config"
+cat > "$CONFIG_FILE" << CONFIGEOF
+# Electrs Public Gateway Runtime Configuration
+# This file is generated by setup.sh
+
 VPS_HOST="$VPS_HOST"
 VPS_USER="$VPS_USER"
-VPS_PORT="$VPS_PORT"
 SSH_KEY_PATH="$SSH_KEY_PATH"
 SERVICE_NAME="$SERVICE_NAME"
 ELECTRS_PORT="$ELECTRS_PORT"
-CONFIG_EOF
+DOMAIN="$DOMAIN"
+CONFIGEOF
 
-print_status "Configuration saved to $HOME/.config/electrs-pub/config"
+print_success "Home server setup completed!"
 
-echo ""
-print_status "Home server setup complete! ✅"
 echo ""
 echo "Next steps:"
-echo "1. Set up the VPS using the vps/setup.sh script"
-echo "2. Configure DNS to point electrs.bittrade.co.in to your VPS IP"
-echo "3. Test the connection"
+echo "1. Run the VPS setup script on your VPS server"
+echo "2. Configure DNS to point $DOMAIN to your VPS IP"
+echo "3. Test the connection with: ./scripts/tunnel-status.sh"
 echo ""
 echo "Management commands:"
-echo "  Check tunnel status: ./scripts/tunnel-status.sh"
-echo "  View tunnel logs:    journalctl -u $SERVICE_NAME -f"
-echo "  Restart tunnel:      ./scripts/tunnel-restart.sh"
+echo "  ./scripts/tunnel-status.sh   - Check tunnel status"
+echo "  ./scripts/tunnel-restart.sh  - Restart tunnel"
+echo "  ./scripts/check-electrs.sh   - Check electrs status"
+

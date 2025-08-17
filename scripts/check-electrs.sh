@@ -1,59 +1,67 @@
 #!/bin/bash
 
+# Get the directory of this script
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+
+# Source configuration
+if [ -f "$PROJECT_ROOT/config.env" ]; then
+    source "$PROJECT_ROOT/config.env"
+else
+    echo "❌ Configuration file not found: $PROJECT_ROOT/config.env"
+    exit 1
+fi
+
 echo "⚡ Electrs Status Check"
 echo "======================"
 
 # Check if electrs process is running
 echo "Process Status:"
-if pgrep -f electrs >/dev/null; then
-    echo "✅ Electrs process is running"
+if pgrep -f electrs > /dev/null; then
+    print_success "Electrs process is running"
     echo "   PID(s): $(pgrep -f electrs | tr '\n' ' ')"
 else
-    echo "❌ Electrs process not found"
+    print_error "Electrs process is not running"
 fi
 
-# Check if port 50005 is listening
+# Check if port is listening
 echo ""
 echo "Port Status:"
-if netstat -tlnp 2>/dev/null | grep -q ":50005"; then
-    echo "✅ Port 50005 is listening"
-    netstat -tlnp 2>/dev/null | grep ":50005"
+if netstat -tlnp 2>/dev/null | grep -q ":$ELECTRS_PORT"; then
+    print_success "Port $ELECTRS_PORT is listening"
+    netstat -tlnp 2>/dev/null | grep ":$ELECTRS_PORT"
 else
-    echo "❌ Port 50005 is not listening"
+    print_error "Port $ELECTRS_PORT is not listening"
 fi
 
 # Check electrs config
 echo ""
 echo "Configuration:"
-if [ -f "$HOME/.electrs/config.toml" ]; then
-    echo "✅ Config file exists: $HOME/.electrs/config.toml"
+if [ -f "$ELECTRS_CONFIG_PATH" ]; then
+    print_success "Config file exists: $ELECTRS_CONFIG_PATH"
     echo ""
-    echo "Current config:"
-    cat "$HOME/.electrs/config.toml"
+    echo "Key configuration values:"
+    grep -E "electrum_rpc_addr|network|db_dir" "$ELECTRS_CONFIG_PATH" | head -5
 else
-    echo "❌ Config file not found: $HOME/.electrs/config.toml"
+    print_error "Config file not found: $ELECTRS_CONFIG_PATH"
 fi
 
 # Check recent logs
 echo ""
 echo "Recent Electrs Logs:"
-if [ -f "$HOME/.electrs/run_electrs.log" ]; then
-    echo "Last 10 lines from $HOME/.electrs/run_electrs.log:"
-    tail -n 10 "$HOME/.electrs/run_electrs.log"
+if [ -f "$ELECTRS_LOG_PATH" ]; then
+    echo "Last 10 lines from $ELECTRS_LOG_PATH:"
+    tail -n 10 "$ELECTRS_LOG_PATH"
 else
-    echo "❌ Log file not found: $HOME/.electrs/run_electrs.log"
+    print_warning "Log file not found: $ELECTRS_LOG_PATH"
 fi
 
 # Test connection
 echo ""
 echo "Connection Test:"
-if timeout 3 bash -c "</dev/tcp/127.0.0.1/50005" 2>/dev/null; then
-    echo "✅ Can connect to electrs on port 50005"
+if timeout 3 bash -c "</dev/tcp/127.0.0.1/$ELECTRS_PORT" 2>/dev/null; then
+    print_success "Can connect to electrs on port $ELECTRS_PORT"
 else
-    echo "❌ Cannot connect to electrs on port 50005"
-    echo "   This could mean electrs is not running or not listening on this port"
+    print_error "Cannot connect to electrs on port $ELECTRS_PORT"
 fi
 
-echo ""
-echo "If electrs is not running, you may need to start it through parmanode"
-echo "or check the parmanode logs for issues."
