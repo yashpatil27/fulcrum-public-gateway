@@ -83,7 +83,7 @@ case "$1" in
         # Port status
         echo ""
         echo "Port Status:"
-        for port in 50001 50002 50005; do
+        for port in 50002 50005; do
             if netstat -tlnp 2>/dev/null | grep -q ":$port"; then
                 print_success "Port $port is listening"
             else

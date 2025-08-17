@@ -37,7 +37,7 @@ fi
 # Check all Fulcrum ports
 echo ""
 echo "All Fulcrum Ports:"
-FULCRUM_PORTS="50001 50002 50005"
+FULCRUM_PORTS="50002 50005"
 for port in $FULCRUM_PORTS; do
     if netstat -tlnp 2>/dev/null | grep -q ":$port"; then
         print_success "Port $port is listening"

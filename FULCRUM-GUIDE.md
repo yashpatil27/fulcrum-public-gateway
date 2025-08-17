@@ -81,8 +81,7 @@ rpcpassword = your_rpc_password
 datadir = /home/user/.fulcrum_db
 bitcoind = 127.0.0.1:8332
 
-# Multiple TCP ports
-tcp = 0.0.0.0:50001    # Standard port
+# Required TCP port
 tcp = 0.0.0.0:50005    # Tunnel port (required)
 
 # SSL support

@@ -105,9 +105,8 @@ tcp = 0.0.0.0:50005
 ssl = 0.0.0.0:50002  # Optional: for direct SSL connections
 ```
 
-You can have Fulcrum listen on multiple ports:
+You can optionally add SSL support:
 ```bash
-tcp = 0.0.0.0:50001   # Standard unencrypted port
 tcp = 0.0.0.0:50005   # Tunnel port (required for this setup)
 ssl = 0.0.0.0:50002   # SSL port
 ```
