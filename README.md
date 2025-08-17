@@ -213,3 +213,5 @@ For new users, the fastest way to get started:
 3. **Run setup**: `./home-server/setup.sh` then `./vps/setup.sh` on VPS
 
 
+
+> **Note**: This repository is now fully configurable via `config.env` - no hardcoded values to change!
