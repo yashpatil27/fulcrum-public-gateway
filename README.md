@@ -202,3 +202,14 @@ The scripts automatically load configuration from `config.env`, so no hardcoded 
 Check logs and run diagnostic scripts if issues arise. The systemd service will automatically attempt to reconnect if the tunnel drops.
 
 For configuration issues, verify that `config.env` has been properly edited with your domain and email address.
+
+
+## Quick Setup Guide
+
+For new users, the fastest way to get started:
+
+1. **Clone and configure**: `git clone [repo] && cd electrs_pub && ./validate-config.sh`
+2. **Edit config.env**: Change domain and email
+3. **Run setup**: `./home-server/setup.sh` then `./vps/setup.sh` on VPS
+
+
