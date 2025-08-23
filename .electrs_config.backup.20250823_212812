@@ -1,0 +1,9 @@
+# Electrs Public Gateway Runtime Configuration
+# This file matches your actual working setup
+
+VPS_HOST="vm-374.lnvps.cloud"
+VPS_USER="ubuntu"
+SSH_KEY_PATH="/home/oem/.ssh/electrs_tunnel"
+SERVICE_NAME="electrs-tunnel"
+ELECTRS_PORT="50005"
+DOMAIN="electrs.bittrade.co.in"
