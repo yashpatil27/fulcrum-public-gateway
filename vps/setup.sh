@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Electrs Public Gateway - VPS Setup Script
+# Fulcrum Public Gateway - VPS Setup Script
 set -e
 
 # Get the directory of this script
@@ -16,7 +16,7 @@ else
     exit 1
 fi
 
-echo "☁️  Setting up Electrs Public Gateway - VPS Server"
+echo "☁️  Setting up Fulcrum Public Gateway - VPS Server"
 echo "================================================="
 
 # Function to print colored output
@@ -35,7 +35,7 @@ fi
 print_info "Using configuration:"
 print_info "  Domain: $DOMAIN"
 print_info "  SSL Email: $SSL_EMAIL"
-print_info "  Electrs Port: $ELECTRS_PORT"
+print_info "  Fulcrum Port: $FULCRUM_PORT"
 
 # Get server IP
 SERVER_IP=$(curl -s ipinfo.io/ip || echo "Unable to determine IP")
@@ -59,7 +59,7 @@ ufw allow 443/tcp
 # Create nginx configuration
 print_info "Creating nginx configuration..."
 cat > "$NGINX_CONFIG" << NGINXEOF
-# Electrs Public Gateway Configuration
+# Fulcrum Public Gateway Configuration
 # HTTP server (redirect to HTTPS)
 server {
     listen 80;
@@ -93,16 +93,16 @@ server {
     add_header X-XSS-Protection "1; mode=block";
     
     # Rate limiting
-    limit_req_zone \$binary_remote_addr zone=electrs:10m rate=10r/m;
-    limit_req zone=electrs burst=20 nodelay;
+    limit_req_zone \$binary_remote_addr zone=fulcrum:10m rate=10r/m;
+    limit_req zone=fulcrum burst=20 nodelay;
     
     # Logging
     access_log $NGINX_ACCESS_LOG;
     error_log $NGINX_ERROR_LOG;
     
-    # Proxy to local electrs (via SSH tunnel)
+    # Proxy to local fulcrum (via SSH tunnel)
     location / {
-        proxy_pass http://127.0.0.1:$ELECTRS_PORT;
+        proxy_pass http://127.0.0.1:$FULCRUM_PORT;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
@@ -159,7 +159,7 @@ crontab -l 2>/dev/null | grep -q "certbot renew" || {
 
 # Create log rotation configuration
 print_info "Setting up log rotation..."
-cat > /etc/logrotate.d/electrs-nginx << LOGROTATEEOF
+cat > /etc/logrotate.d/fulcrum-nginx << LOGROTATEEOF
 $NGINX_ACCESS_LOG $NGINX_ERROR_LOG {
     daily
     missingok

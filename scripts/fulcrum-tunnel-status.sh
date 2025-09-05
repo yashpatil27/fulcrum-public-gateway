@@ -13,7 +13,7 @@ else
 fi
 
 # Check if runtime config exists (created by setup.sh)
-RUNTIME_CONFIG="$PROJECT_ROOT/.electrs_config"
+RUNTIME_CONFIG="$PROJECT_ROOT/.fulcrum_config"
 if [ -f "$RUNTIME_CONFIG" ]; then
     source "$RUNTIME_CONFIG"
 fi
@@ -23,7 +23,7 @@ echo "=============================="
 print_info "Configuration:"
 print_info "  Service: $SERVICE_NAME"
 print_info "  Domain: $DOMAIN"
-print_info "  Port: $ELECTRS_PORT"
+print_info "  Port: $FULCRUM_PORT"
 
 echo ""
 echo "Service Status:"
@@ -39,9 +39,9 @@ systemctl status "$SERVICE_NAME" --no-pager -l
 
 echo ""
 echo "Tunnel Connection Test:"
-if pgrep -f "ssh.*$ELECTRS_PORT.*$VPS_HOST" > /dev/null; then
+if pgrep -f "ssh.*$FULCRUM_PORT.*$VPS_HOST" > /dev/null; then
     print_success "SSH tunnel process is running"
-    echo "   Process: $(pgrep -f "ssh.*$ELECTRS_PORT.*$VPS_HOST" | head -1)"
+    echo "   Process: $(pgrep -f "ssh.*$FULCRUM_PORT.*$VPS_HOST" | head -1)"
 else
     print_error "SSH tunnel process is not running"
 fi
@@ -66,8 +66,8 @@ echo ""
 echo "Fulcrum Status:"
 if pgrep -f fulcrum > /dev/null; then
     print_success "Fulcrum is running"
-    if timeout 3 bash -c "</dev/tcp/127.0.0.1/$ELECTRS_PORT" 2>/dev/null; then
-        print_success "Fulcrum is accepting connections on port $ELECTRS_PORT"
+    if timeout 3 bash -c "</dev/tcp/127.0.0.1/$FULCRUM_PORT" 2>/dev/null; then
+        print_success "Fulcrum is accepting connections on port $FULCRUM_PORT"
     else
         print_warning "Fulcrum is running but not accepting connections (likely still syncing)"
     fi
@@ -77,9 +77,9 @@ fi
 
 echo ""
 echo "Port Forward Test:"
-if netstat -tlnp 2>/dev/null | grep -q ":$ELECTRS_PORT"; then
-    print_success "Local port $ELECTRS_PORT is listening"
-    echo "   $(netstat -tlnp 2>/dev/null | grep ":$ELECTRS_PORT")"
+if netstat -tlnp 2>/dev/null | grep -q ":$FULCRUM_PORT"; then
+    print_success "Local port $FULCRUM_PORT is listening"
+    echo "   $(netstat -tlnp 2>/dev/null | grep ":$FULCRUM_PORT")"
 else
-    print_error "Local port $ELECTRS_PORT is not listening"
+    print_error "Local port $FULCRUM_PORT is not listening"
 fi

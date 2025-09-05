@@ -94,10 +94,10 @@ case "$1" in
         # Connection test
         echo ""
         echo "Connection Test:"
-        if timeout 3 bash -c "</dev/tcp/127.0.0.1/$ELECTRS_PORT" 2>/dev/null; then
-            print_success "Can connect to Fulcrum on port $ELECTRS_PORT"
+        if timeout 3 bash -c "</dev/tcp/127.0.0.1/$FULCRUM_PORT" 2>/dev/null; then
+            print_success "Can connect to Fulcrum on port $FULCRUM_PORT"
         else
-            print_warning "Cannot connect to port $ELECTRS_PORT (may still be syncing)"
+            print_warning "Cannot connect to port $FULCRUM_PORT (may still be syncing)"
         fi
         ;;
     
@@ -118,7 +118,7 @@ case "$1" in
             exit 1
         fi
         
-        if timeout 3 bash -c "</dev/tcp/127.0.0.1/$ELECTRS_PORT" 2>/dev/null; then
+        if timeout 3 bash -c "</dev/tcp/127.0.0.1/$FULCRUM_PORT" 2>/dev/null; then
             print_success "Fulcrum is accepting connections - likely synced!"
         else
             print_warning "Fulcrum is not accepting connections - still syncing"

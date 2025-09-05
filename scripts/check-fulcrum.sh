@@ -27,11 +27,11 @@ fi
 # Check if port is listening
 echo ""
 echo "Port Status:"
-if netstat -tlnp 2>/dev/null | grep -q ":$ELECTRS_PORT"; then
-    print_success "Port $ELECTRS_PORT is listening"
-    netstat -tlnp 2>/dev/null | grep ":$ELECTRS_PORT"
+if netstat -tlnp 2>/dev/null | grep -q ":$FULCRUM_PORT"; then
+    print_success "Port $FULCRUM_PORT is listening"
+    netstat -tlnp 2>/dev/null | grep ":$FULCRUM_PORT"
 else
-    print_error "Port $ELECTRS_PORT is not listening"
+    print_error "Port $FULCRUM_PORT is not listening"
 fi
 
 # Check all Fulcrum ports
@@ -78,16 +78,16 @@ journalctl -u fulcrum -n 10 --no-pager | tail -10
 # Test connection
 echo ""
 echo "Connection Test:"
-if timeout 3 bash -c "</dev/tcp/127.0.0.1/$ELECTRS_PORT" 2>/dev/null; then
-    print_success "Can connect to Fulcrum on port $ELECTRS_PORT"
+if timeout 3 bash -c "</dev/tcp/127.0.0.1/$FULCRUM_PORT" 2>/dev/null; then
+    print_success "Can connect to Fulcrum on port $FULCRUM_PORT"
 else
-    print_error "Cannot connect to Fulcrum on port $ELECTRS_PORT (may still be syncing)"
+    print_error "Cannot connect to Fulcrum on port $FULCRUM_PORT (may still be syncing)"
 fi
 
 # Check sync status (if available)
 echo ""
 echo "Sync Status:"
-if timeout 5 bash -c "</dev/tcp/127.0.0.1/$ELECTRS_PORT" 2>/dev/null; then
+if timeout 5 bash -c "</dev/tcp/127.0.0.1/$FULCRUM_PORT" 2>/dev/null; then
     print_info "Fulcrum is accepting connections - likely synced"
 else
     print_warning "Fulcrum not accepting connections - likely still syncing"

@@ -12,7 +12,7 @@ else
     exit 1
 fi
 
-echo "🛑 Stopping Electrs Tunnel"
+echo "🛑 Stopping Fulcrum Tunnel"
 echo "========================="
 
 print_info "Stopping service: $SERVICE_NAME"

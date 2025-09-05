@@ -13,18 +13,18 @@ else
 fi
 
 # Check if runtime config exists (created by setup.sh)
-RUNTIME_CONFIG="$PROJECT_ROOT/.electrs_config"
+RUNTIME_CONFIG="$PROJECT_ROOT/.fulcrum_config"
 if [ -f "$RUNTIME_CONFIG" ]; then
     source "$RUNTIME_CONFIG"
 fi
 
-echo "🔍 Electrs Tunnel Status Check"
+echo "🔍 Fulcrum Tunnel Status Check"
 echo "=============================="
 
 print_info "Configuration:"
 print_info "  Service: $SERVICE_NAME"
 print_info "  Domain: $DOMAIN"
-print_info "  Port: $ELECTRS_PORT"
+print_info "  Port: $FULCRUM_PORT"
 
 # Check systemd service status
 echo ""
@@ -40,9 +40,9 @@ if systemctl is-active --quiet $SERVICE_NAME; then
     # Check if tunnel is actually working
     echo ""
     echo "Tunnel Connection Test:"
-    if pgrep -f "ssh.*$ELECTRS_PORT.*$VPS_HOST" > /dev/null; then
+    if pgrep -f "ssh.*$FULCRUM_PORT.*$VPS_HOST" > /dev/null; then
         print_success "SSH tunnel process is running"
-        echo "   Process: $(pgrep -f "ssh.*$ELECTRS_PORT.*$VPS_HOST" | head -1)"
+        echo "   Process: $(pgrep -f "ssh.*$FULCRUM_PORT.*$VPS_HOST" | head -1)"
     else
         print_warning "SSH tunnel process not found"
     fi

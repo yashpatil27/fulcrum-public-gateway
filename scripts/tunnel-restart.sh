@@ -12,7 +12,7 @@ else
     exit 1
 fi
 
-echo "🔄 Restarting Electrs Tunnel"
+echo "🔄 Restarting Fulcrum Tunnel"
 echo "============================="
 
 print_info "Restarting service: $SERVICE_NAME"

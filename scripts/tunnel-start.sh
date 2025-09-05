@@ -12,7 +12,7 @@ else
     exit 1
 fi
 
-echo "🚀 Starting Electrs Tunnel"
+echo "🚀 Starting Fulcrum Tunnel"
 echo "=========================="
 
 print_info "Starting service: $SERVICE_NAME"

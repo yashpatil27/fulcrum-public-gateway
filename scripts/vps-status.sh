@@ -67,10 +67,10 @@ fi
 # Check port connectivity (from tunnel)
 echo ""
 echo "Port Connectivity:"
-if timeout 3 bash -c "</dev/tcp/127.0.0.1/$ELECTRS_PORT" 2>/dev/null; then
-    print_success "Can connect to port $ELECTRS_PORT (tunnel working)"
+if timeout 3 bash -c "</dev/tcp/127.0.0.1/$FULCRUM_PORT" 2>/dev/null; then
+    print_success "Can connect to port $FULCRUM_PORT (tunnel working)"
 else
-    print_error "Cannot connect to port $ELECTRS_PORT"
+    print_error "Cannot connect to port $FULCRUM_PORT"
     echo "   This usually means the SSH tunnel is not connected"
 fi
 
