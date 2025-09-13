@@ -1,337 +1,246 @@
-# Electrum Server Public Gateway Setup
+# Fulcrum Public Gateway - VPS Setup
 
-This repository contains the configuration and scripts to expose your home electrum server publicly through a VPS, bypassing CGNAT limitations.
+This VPS acts as a public gateway for your home Fulcrum Bitcoin server, bypassing CGNAT limitations using SSH reverse tunnels and SSL termination.
 
-**Supports both Electrs and Fulcrum servers!**
+## 🔧 Current Configuration
 
-## 🚀 **NEW: Port 443 Solution**
+**Domain**: `fulcrum.bittrade.co.in`  
+**Wallet Connection**: `fulcrum.bittrade.co.in:443:s`
 
-**RECOMMENDED**: Use the **Port 443 Solution** for maximum reliability. Many VPS providers now block cryptocurrency-related ports like 50002, but port 443 (HTTPS) is never blocked.
-
-**Quick Setup for Port 443**:
-- Your wallets connect to: `your-domain.com:443:s`  
-- See [PORT-443-SOLUTION.md](PORT-443-SOLUTION.md) for complete details
-
-## Overview
-
-- **Home Server**: Runs electrs or Fulcrum locally on configurable port (default: 50005)
-- **VPS**: Acts as public gateway with nginx reverse proxy and SSL
-- **Connection**: SSH reverse tunnel from home server to VPS
-- **Domain**: Configurable (example: fulcrum.bittrade.co.in)
-
-## Architecture
-
+### Architecture
 ```
-Internet → your-domain.com (VPS) → SSH Tunnel → Home Server (electrs/fulcrum:50005)
-```
-
-### Traditional Setup (Port 50002)
-```
-Electrum Wallet → domain.com:50002:s (SSL)
-    ↓ (stunnel SSL termination)
+Bitcoin Wallets → fulcrum.bittrade.co.in:443 (SSL)
+    ↓ (Stunnel4 SSL Termination)
 VPS localhost:50005
-    ↓ (SSH reverse tunnel)
+    ↓ (SSH Reverse Tunnel)
 Home Server Fulcrum:50005
 ```
 
-### Port 443 Solution (Recommended)
-```
-Electrum Wallet → domain.com:443:s (SSL)
-    ↓ (stunnel on port 443)
-VPS localhost:50005
-    ↓ (SSH reverse tunnel)
-Home Server Fulcrum:50005
-```
+### Services Running
+- **Stunnel4**: Port 443 (SSL termination for Electrum clients)
+- **Nginx**: Ports 8080 (HTTP redirect), 8443 (HTTPS proxy/health checks)
+- **SSH Tunnel**: localhost:50005 (forwarded from home server)
 
-## Supported Electrum Servers
+### SSL Certificate
+- **Domain**: fulcrum.bittrade.co.in
+- **Expires**: November 15, 2025
+- **Auto-renewal**: Configured via cron
 
-### Electrs
-- Lightweight Rust-based electrum server
-- Lower memory usage
-- Faster initial sync
-- **Scripts**: `check-electrs.sh`, `tunnel-status.sh`
-
-### Fulcrum  
-- C++-based electrum server with advanced features
-- Higher performance for concurrent connections
-- Larger memory footprint
-- **Scripts**: `check-fulcrum.sh`, `fulcrum-tunnel-status.sh`, `fulcrum-manage.sh`
-
-**Both servers work with the same infrastructure** - just configure them to listen on port 50005!
-
-## Prerequisites
-
-- Home server running electrs OR Fulcrum (this machine)
-- VPS with root/sudo access
-- Domain pointing to VPS
-- SSH access between home server and VPS
-
-## Quick Start
-
-### 1. Configuration
-
-First, edit the `config.env` file to customize your setup:
+## 🚀 Quick Status Check
 
 ```bash
-# Edit the main configuration file
-nano config.env
-```
+# Check all services
+systemctl status nginx stunnel4
 
-**Required changes:**
-- `DOMAIN`: Replace with your domain (e.g., "fulcrum.yourdomain.com")
-- `SSL_EMAIL`: Replace with your email address for SSL certificates
-
-**Optional changes:**
-- `ELECTRS_PORT`: Change if your server runs on a different port
-- `SERVICE_NAME`: Change the systemd service name if desired
-
-### 2. Home Server Setup (Current Machine)
-
-Run the home server setup script:
-```bash
-./home-server/setup.sh
-```
-
-This will:
-- Load configuration from `config.env`
-- Generate SSH keys for the tunnel
-- Create systemd service for persistent tunnel
-- Set up monitoring and management scripts
-
-### 3. VPS Setup
-
-Clone this repo on your VPS and run:
-```bash
-./vps/setup.sh
-```
-
-This will:
-- Load configuration from `config.env`
-- Install nginx and certbot
-- Configure nginx reverse proxy for your domain
-- Set up SSL certificate
-- Configure firewall rules
-
-### 4. Choose Your Port Configuration
-
-#### Option A: Port 443 Solution (Recommended)
-
-**Benefits**: Never blocked, appears as normal HTTPS traffic, maximum reliability
-
-**Setup**: Follow the [PORT-443-SOLUTION.md](PORT-443-SOLUTION.md) guide
-
-**Wallet Connection**: `your-domain.com:443:s`
-
-#### Option B: Traditional Port 50002
-
-**Benefits**: Standard Electrum port, traditional setup
-
-**Setup**: Use the standard VPS setup script (above)
-
-**Wallet Connection**: `your-domain.com:50002:s`
-
-**Note**: May be blocked by some VPS providers
-
-## Server Configuration
-
-### For Electrs Users
-
-Ensure your electrs is configured to listen on port 50005:
-```toml
-# In your electrs config.toml
-electrum_rpc_addr = "0.0.0.0:50005"
-```
-
-### For Fulcrum Users
-
-Ensure your Fulcrum is configured to listen on port 50005:
-```bash
-# In your fulcrum.conf
-tcp = 0.0.0.0:50005
-ssl = 0.0.0.0:50002  # Optional: for direct SSL connections
-```
-
-## Configuration File
-
-The `config.env` file contains all configurable values:
-
-```bash
-# Domain Configuration
-DOMAIN="fulcrum.bittrade.co.in"          # Change this!
-SSL_EMAIL="admin@bittrade.co.in"         # Change this!
-
-# Port Configuration  
-ELECTRS_PORT="50005"                     # Usually fine as-is
-ELECTRS_SSL_PORT="50002"                 # Usually fine as-is (or 443)
-SSH_PORT="22"                            # Usually fine as-is
-
-# Service Configuration
-SERVICE_NAME="electrs-tunnel"            # Usually fine as-is
-SSH_KEY_NAME="electrs_tunnel"            # Usually fine as-is
-```
-
-## Management Scripts
-
-### Universal Scripts (work with both servers)
-```bash
-./scripts/tunnel-status.sh      # Check tunnel status
-./scripts/tunnel-start.sh       # Start tunnel service
-./scripts/tunnel-stop.sh        # Stop tunnel service  
-./scripts/tunnel-restart.sh     # Restart tunnel service
-./scripts/vps-status.sh         # Check VPS nginx and SSL status
-./scripts/vps-logs.sh           # View VPS logs
-./scripts/renew-ssl.sh          # Manually renew SSL certificate
-./scripts/update-configs.sh     # Update configs from git
-```
-
-### Electrs-Specific Scripts
-```bash
-./scripts/check-electrs.sh      # Check electrs status and configuration
-```
-
-### Fulcrum-Specific Scripts
-```bash
-./scripts/check-fulcrum.sh           # Check Fulcrum status and configuration  
-./scripts/fulcrum-tunnel-status.sh   # Tunnel status with Fulcrum awareness
-./scripts/fulcrum-manage.sh status   # Comprehensive Fulcrum management
-./scripts/fulcrum-manage.sh logs     # View Fulcrum logs
-./scripts/fulcrum-manage.sh sync-status  # Check if still syncing
-```
-
-## Connection Examples
-
-### Port 443 Solution (Recommended)
-```bash
-# Electrum Desktop
-electrum --server your-domain.com:443:s
-
-# Electrum Client Test
+# Test Electrum connection
 echo '{"method":"server.version","params":["test","1.4"],"id":1}' | \
-  openssl s_client -connect your-domain.com:443 -quiet 2>/dev/null
+  openssl s_client -connect fulcrum.bittrade.co.in:443 -quiet 2>/dev/null
+
+# Check health endpoint
+curl -k https://fulcrum.bittrade.co.in:8443/health
+
+# View service ports
+ss -tulpn | grep -E "(443|8080|8443|50005)"
 ```
 
-### Traditional Port 50002
+## 📱 Wallet Connection
+
+**Connection String**: `fulcrum.bittrade.co.in:443:s`
+
+The `:s` suffix is crucial - it tells the wallet to use SSL/TLS encryption.
+
+### Supported Wallets
+- Electrum Desktop/Mobile
+- Blue Wallet
+- Sparrow Wallet
+- Any wallet supporting custom Electrum servers
+
+## 🔍 Troubleshooting
+
+### Connection Issues
+
+1. **Check SSH tunnel from home server**:
+   ```bash
+   ps aux | grep ssh | grep 50005
+   ss -tulpn | grep 50005
+   ```
+
+2. **Check SSL certificate**:
+   ```bash
+   sudo certbot certificates
+   openssl s_client -connect fulcrum.bittrade.co.in:443 -servername fulcrum.bittrade.co.in
+   ```
+
+3. **Check stunnel logs**:
+   ```bash
+   sudo tail -f /var/log/stunnel4/stunnel.log
+   ```
+
+4. **Check nginx logs**:
+   ```bash
+   sudo tail -f /var/log/nginx/fulcrum.bittrade.co.in.error.log
+   ```
+
+### Service Management
+
 ```bash
-# Electrum Desktop
-electrum --server your-domain.com:50002:s
+# Restart services
+sudo systemctl restart stunnel4
+sudo systemctl reload nginx
 
-# Electrum Client Test  
-echo '{"method":"server.version","params":["test","1.4"],"id":1}' | \
-  openssl s_client -connect your-domain.com:50002 -quiet 2>/dev/null
+# Check service status
+systemctl status nginx stunnel4
+
+# Check firewall
+sudo ufw status
 ```
 
-## Testing
+### Common Issues
 
-### For Electrs
-1. **Test electrs locally**:
-   ```bash
-   telnet localhost 50005
-   ```
+**"Connection refused"**
+- SSH tunnel from home server is down
+- Check home server connection and tunnel service
 
-2. **Check electrs status**:
-   ```bash
-   ./scripts/check-electrs.sh
-   ```
+**"SSL handshake failed"**
+- Certificate expired or invalid
+- Run: `sudo certbot renew`
 
-### For Fulcrum  
-1. **Test Fulcrum locally**:
-   ```bash
-   telnet localhost 50005
-   ```
+**"No route to host"**
+- DNS not resolving
+- Check domain DNS settings
 
-2. **Check Fulcrum status**:
-   ```bash
-   ./scripts/check-fulcrum.sh
-   ```
+**"Timeout"**
+- Firewall blocking connection
+- Home server Fulcrum not responding
 
-3. **Check sync status**:
-   ```bash
-   ./scripts/fulcrum-manage.sh sync-status
-   ```
+## ⚙️ Configuration Files
 
-### Universal Tests
-1. **Test tunnel connection**:
-   ```bash
-   ./scripts/tunnel-status.sh
-   ```
+### Stunnel Configuration
+**File**: `/etc/stunnel/fulcrum.conf`
+```ini
+pid = /var/run/stunnel4/stunnel.pid
+output = /var/log/stunnel4/stunnel.log
 
-2. **Test public endpoint**:
-   ```bash
-   curl -k https://your-domain.com/health
-   ```
+[fulcrum-ssl]
+accept = 443
+connect = 127.0.0.1:50005
+cert = /etc/letsencrypt/live/fulcrum.bittrade.co.in/fullchain.pem
+key = /etc/letsencrypt/live/fulcrum.bittrade.co.in/privkey.pem
+```
 
-## Troubleshooting
+### Nginx Configuration
+**File**: `/etc/nginx/sites-enabled/fulcrum.bittrade.co.in`
 
-**Connection Issues?** See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for comprehensive solutions.
+Key points:
+- HTTP (8080) redirects to HTTPS
+- HTTPS (8443) proxies to localhost:50005
+- Health check endpoint at `/health`
+- Rate limiting configured
+- SSL certificates managed by certbot
 
-**Port 50002 Blocked?** Use the [Port 443 Solution](PORT-443-SOLUTION.md).
+### Project Configuration
+**File**: `config.env`
+```bash
+DOMAIN="fulcrum.bittrade.co.in"
+SSL_EMAIL="admin@bittrade.co.in"
+FULCRUM_PORT="50005"
+```
 
-**Common fixes:**
-- Restart services: `sudo systemctl restart nginx stunnel4`
-- Restart tunnel: `sudo systemctl restart electrs-tunnel` (on home server)
-- Check logs: `sudo journalctl -u stunnel4 -f`
+## 🔐 Security Features
 
-## Security Notes
+- **SSL/TLS Encryption**: All external connections encrypted
+- **Rate Limiting**: 10 requests per second via nginx
+- **Firewall**: UFW configured with minimal ports
+- **SSH Keys**: Passwordless authentication for tunnel
+- **Security Headers**: HSTS, XSS protection, etc.
 
-- SSH keys are used for authentication (no passwords)
-- Only the electrum server port is forwarded through the tunnel
-- SSL/TLS encryption for all external connections
-- Nginx rate limiting configured
-- Firewall rules restrict access to necessary ports only
+## 📊 Monitoring
 
-## Port Comparison
+### Health Checks
+```bash
+# Electrum protocol test
+echo '{"method":"server.features","params":[],"id":1}' | \
+  openssl s_client -connect fulcrum.bittrade.co.in:443 -quiet 2>/dev/null
 
-| Configuration | External Port | Benefits | Drawbacks |
-|---------------|---------------|----------|-----------|
-| **Port 443 (Recommended)** | 443 | Never blocked, stealth mode, maximum reliability | Requires nginx port change |
-| **Port 50002 (Traditional)** | 50002 | Standard Electrum port, simple setup | May be blocked by VPS providers |
+# HTTP health endpoint
+curl -k https://fulcrum.bittrade.co.in:8443/health
 
-## Server Comparison
+# SSL certificate check
+openssl s_client -connect fulcrum.bittrade.co.in:443 -servername fulcrum.bittrade.co.in 2>&1 | grep -E "(verify|subject|issuer)"
+```
 
-| Feature | Electrs | Fulcrum |
-|---------|---------|---------| 
-| Language | Rust | C++ |
-| Memory Usage | Lower (~2-4GB) | Higher (~8-30GB) |
-| Sync Time | Moderate | Slower initial, but has fast-sync |
-| Performance | Good | Excellent for many clients |
-| Features | Standard | Advanced (stats, multiple coins) |
-| Configuration | TOML file | Simple key=value |
+### Log Monitoring
+```bash
+# Real-time connection monitoring
+sudo tail -f /var/log/stunnel4/stunnel.log
 
-## Documentation
+# Nginx access logs
+sudo tail -f /var/log/nginx/fulcrum.bittrade.co.in.access.log
 
-- **[PORT-443-SOLUTION.md](PORT-443-SOLUTION.md)**: Complete guide for port 443 setup
-- **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)**: Comprehensive troubleshooting guide
-- **[FULCRUM-GUIDE.md](FULCRUM-GUIDE.md)**: Fulcrum-specific setup and management
-- **[VPS-SETUP.md](VPS-SETUP.md)**: Detailed VPS configuration documentation
+# System service logs
+sudo journalctl -u stunnel4 -u nginx -f
+```
 
-## Updates and Maintenance
+## 🔄 Maintenance
 
-1. **Update configurations**:
-   ```bash
-   git pull
-   ./scripts/update-configs.sh
-   ```
+### SSL Certificate Renewal
+Certificates auto-renew via cron. Manual renewal:
+```bash
+sudo certbot renew
+sudo systemctl reload nginx stunnel4
+```
 
-2. **Monitor SSL expiry**:
-   - Certificates auto-renew via cron
-   - Manual renewal: `sudo ./scripts/renew-ssl.sh`
+### Service Updates
+```bash
+# Update system
+sudo apt update && sudo apt upgrade
 
-3. **Monitor tunnel health**:
-   - Service automatically restarts on failure
-   - Monitor with `./scripts/tunnel-status.sh`
+# Restart services after updates
+sudo systemctl restart nginx stunnel4
+```
 
-## Support
+### Backup Important Files
+```bash
+# Configuration backup
+sudo cp /etc/stunnel/fulcrum.conf ~/fulcrum.conf.backup
+sudo cp /etc/nginx/sites-available/fulcrum.bittrade.co.in ~/nginx.conf.backup
+cp config.env config.env.backup
+```
 
-- Check [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for common issues
-- Run diagnostic scripts if problems arise
-- Verify `config.env` has been properly edited with your domain and email
+## 🏠 Home Server Requirements
 
-## Quick Setup Summary
+Your home server must:
+1. Run Fulcrum on port 50005
+2. Maintain SSH reverse tunnel to this VPS
+3. Have stable internet connection
 
-1. **Clone and configure**: `git clone [repo] && cd electrs-public-gateway`
-2. **Edit config.env**: Change domain and email
-3. **Configure your server**: Ensure electrs or Fulcrum listens on port 50005
-4. **Run setup**: `./home-server/setup.sh` then `./vps/setup.sh` on VPS
-5. **Choose port**: Use port 443 for maximum reliability
+### Home Server Tunnel Command Example
+```bash
+ssh -R 50005:127.0.0.1:50005 -N -f ubuntu@fulcrum.bittrade.co.in
+```
 
-> **Recommendation**: Use the **Port 443 Solution** for production deployments to ensure maximum uptime and reliability.
+## 📞 Support
+
+### Quick Diagnostics
+```bash
+# Run comprehensive status check
+./vps-status-check.sh
+
+# Check specific service
+systemctl status nginx stunnel4
+
+# Test connection
+echo '{"method":"server.version","params":["test","1.4"],"id":1}' | \
+  openssl s_client -connect fulcrum.bittrade.co.in:443 -quiet 2>/dev/null
+```
+
+### Key Files to Check
+- `/var/log/stunnel4/stunnel.log` - SSL connection logs
+- `/var/log/nginx/fulcrum.bittrade.co.in.error.log` - Nginx errors
+- `/etc/stunnel/fulcrum.conf` - SSL termination config
+- `config.env` - Project configuration
+
+---
+**Status**: ✅ Operational  
+**Last Updated**: September 2025  
+**Domain**: fulcrum.bittrade.co.in:443:s
