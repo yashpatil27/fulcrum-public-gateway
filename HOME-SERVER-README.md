@@ -1,0 +1,364 @@
+# Home Server Setup - Fulcrum Public Gateway
+
+This document describes the **complete home server setup** for the Fulcrum public gateway system running on **oem-NUC13ANH-B**.
+
+## 🏠 **System Overview**
+
+### Hardware & OS
+- **Hostname**: `oem-NUC13ANH-B`
+- **Operating System**: Linux Mint
+- **User**: `oem`
+- **Storage**: 3.6TB NVMe SSD (29% used, 2.5TB available)
+
+### Core Services Status
+- **Bitcoin Core**: ✅ Running (PID: 972329, 11.7GB RAM)
+- **Fulcrum Server**: ✅ Running (PID: 2287, 13.9GB RAM)  
+- **SSH Tunnel**: ✅ Running (PID: 1004417)
+
+## ⚡ **Fulcrum Server Configuration**
+
+### Current Status
+```bash
+Version: Fulcrum 1.9.8 (Release d4b3fa1)
+Binary: /usr/local/bin/Fulcrum
+Config: /home/oem/.fulcrum/fulcrum.conf
+Uptime: 5+ days (since Sep 08, 2025)
+Memory: 13.9GB (peak: 14.1GB)
+Database Size: 168GB (/home/oem/.fulcrum_db/)
+```
+
+### Configuration File (`/home/oem/.fulcrum/fulcrum.conf`)
+```ini
+fast-sync = 1000
+datadir = /home/oem/.fulcrum_db
+bitcoind = 127.0.0.1:8332
+ssl = 0.0.0.0:50002
+tcp = 0.0.0.0:50005
+cert = /home/oem/.fulcrum/cert.pem
+key = /home/oem/.fulcrum/key.pem
+rpcuser = parman
+rpcpassword = parman
+peering = false
+```
+
+### Port Configuration
+- **Port 50005**: TCP (Plain Electrum protocol) - **Used by tunnel**
+- **Port 50002**: SSL (Encrypted Electrum protocol) - Local only
+
+### Service Configuration
+```bash
+Service: fulcrum.service
+Status: active (running)
+Enabled: yes (auto-start on boot)
+Service File: /etc/systemd/system/fulcrum.service
+```
+
+## 🔐 **SSH Tunnel Configuration**
+
+### Service Details
+```bash
+Service Name: fulcrum-tunnel.service
+Status: active (running) 
+PID: 1004417
+Uptime: 6+ hours (since Sep 13, 2025)
+Memory: 1.4MB
+```
+
+### Service Configuration (`/etc/systemd/system/fulcrum-tunnel.service`)
+```ini
+[Unit]
+Description=Fulcrum SSH Tunnel to VPS
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=oem
+ExecStart=/usr/bin/ssh -i /home/oem/.ssh/fulcrum_tunnel -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -o ExitOnForwardFailure=yes -N -R 50005:localhost:50005 ubuntu@vm-374.lnvps.cloud
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+```
+
+### Tunnel Details
+- **VPS Host**: `vm-374.lnvps.cloud`
+- **VPS User**: `ubuntu`
+- **SSH Key**: `/home/oem/.ssh/fulcrum_tunnel`
+- **Port Forward**: VPS:50005 ← Home:50005
+- **Keep-alive**: 30s intervals, 3 max failures
+
+## 🪙 **Bitcoin Core Configuration**
+
+### Status
+```bash
+Version: Bitcoin Core (latest)
+PID: 972329
+Memory: 11.7GB (peak: 11.7GB)
+Status: Fully synced (block 914557)
+Data Directory: /home/oem/.bitcoin/
+Config: /home/oem/.bitcoin/bitcoin.conf
+```
+
+### Connection to Fulcrum
+- **RPC Endpoint**: `127.0.0.1:8332`
+- **Authentication**: username/password (parman/parman)
+- **Status**: Connected and synced
+
+## 📁 **Directory Structure**
+
+### Project Files
+```
+/home/oem/fulcrum-public-gateway/
+├── config.env                    # Main configuration
+├── HOME-SERVER-README.md          # This file
+├── README.md                      # General documentation
+├── scripts/                       # Management scripts
+│   ├── check-fulcrum.sh          # Fulcrum status check
+│   ├── fulcrum-manage.sh         # Comprehensive management
+│   ├── fulcrum-tunnel-status.sh  # Tunnel status check
+│   ├── tunnel-status.sh          # Basic tunnel status
+│   ├── tunnel-start.sh           # Start tunnel service
+│   ├── tunnel-stop.sh            # Stop tunnel service
+│   ├── tunnel-restart.sh         # Restart tunnel service
+│   └── vps-status.sh             # Check VPS status
+├── home-server/                   # Home server setup scripts
+├── vps/                          # VPS setup scripts
+└── configs/                      # Config templates
+```
+
+### Fulcrum Files
+```
+/home/oem/.fulcrum/
+├── fulcrum.conf                  # Main configuration
+├── fulcrum.log                   # Log file (5MB+)
+├── cert.pem                      # SSL certificate
+├── key.pem                       # SSL private key
+└── fulcrum.conf.backup.*         # Config backups
+```
+
+### Database & Data
+```
+/home/oem/.fulcrum_db/            # Fulcrum database (168GB)
+/home/oem/.bitcoin/               # Bitcoin Core data
+/home/oem/.ssh/
+├── fulcrum_tunnel                # SSH private key
+└── fulcrum_tunnel.pub           # SSH public key
+```
+
+### System Service Files
+```
+/etc/systemd/system/
+├── fulcrum.service               # Fulcrum service
+├── fulcrum-tunnel.service        # SSH tunnel service
+└── bitcoind.service             # Bitcoin Core service
+```
+
+## 🔧 **Management Commands**
+
+### Service Control
+```bash
+# Fulcrum service
+sudo systemctl status fulcrum
+sudo systemctl restart fulcrum
+sudo systemctl stop fulcrum
+sudo systemctl start fulcrum
+
+# SSH tunnel service
+sudo systemctl status fulcrum-tunnel
+sudo systemctl restart fulcrum-tunnel
+sudo systemctl stop fulcrum-tunnel
+sudo systemctl start fulcrum-tunnel
+
+# Bitcoin Core service
+sudo systemctl status bitcoind
+sudo systemctl restart bitcoind
+```
+
+### Monitoring Scripts
+```bash
+# Navigate to project directory
+cd /home/oem/fulcrum-public-gateway/
+
+# Check Fulcrum status
+./scripts/check-fulcrum.sh
+
+# Check tunnel status
+./scripts/tunnel-status.sh
+./scripts/fulcrum-tunnel-status.sh
+
+# Comprehensive Fulcrum management
+./scripts/fulcrum-manage.sh status
+./scripts/fulcrum-manage.sh logs
+./scripts/fulcrum-manage.sh sync-status
+
+# Tunnel management
+./scripts/tunnel-start.sh
+./scripts/tunnel-stop.sh
+./scripts/tunnel-restart.sh
+```
+
+### Log Monitoring
+```bash
+# Fulcrum logs
+sudo journalctl -u fulcrum -f
+tail -f /home/oem/.fulcrum/fulcrum.log
+
+# Tunnel logs
+sudo journalctl -u fulcrum-tunnel -f
+
+# Bitcoin Core logs
+sudo journalctl -u bitcoind -f
+tail -f /home/oem/.bitcoin/debug.log
+```
+
+## 🧪 **Testing & Verification**
+
+### Local Fulcrum Testing
+```bash
+# Test plain TCP connection
+echo '{"method":"server.version","params":["test","1.4"],"id":1}' | nc localhost 50005
+
+# Test SSL connection
+echo '{"method":"server.version","params":["test","1.4"],"id":1}' | \
+  openssl s_client -connect localhost:50002 -quiet 2>/dev/null
+
+# Check port bindings
+ss -tlnp | grep -E ':50002|:50005'
+```
+
+### Tunnel Testing
+```bash
+# Check tunnel process
+ps aux | grep fulcrum-tunnel
+
+# Test SSH connection to VPS
+ssh -i /home/oem/.ssh/fulcrum_tunnel ubuntu@vm-374.lnvps.cloud "echo 'Connection successful'"
+```
+
+### System Health Checks
+```bash
+# Check disk usage
+df -h /home/oem/.fulcrum_db
+du -sh /home/oem/.fulcrum_db
+
+# Check memory usage
+free -h
+top -p 2287,972329,1004417
+
+# Check Bitcoin sync status
+bitcoin-cli getblockchaininfo
+
+# Check network connections
+ss -an | grep -E ':8332|:50002|:50005'
+```
+
+## ⚙️ **Configuration Reference**
+
+### Main Configuration (`config.env`)
+```bash
+DOMAIN="fulcrum.bittrade.co.in"
+SSL_EMAIL="admin@bittrade.co.in"
+FULCRUM_PORT="50005"
+FULCRUM_SSL_PORT="50002"
+VPS_HOST="vm-374.lnvps.cloud"
+VPS_USER="ubuntu"
+SERVICE_NAME="fulcrum-tunnel"
+SSH_KEY_NAME="fulcrum_tunnel"
+```
+
+### Key Service Dependencies
+1. **Bitcoin Core** → Must be running and synced
+2. **Fulcrum** → Depends on Bitcoin Core RPC
+3. **SSH Tunnel** → Depends on network and SSH keys
+4. **VPS** → Must be configured to accept tunneled connections
+
+## 🔒 **Security Configuration**
+
+### SSH Security
+- **Key-based authentication**: No passwords
+- **Restricted user**: Only `oem` user access
+- **Keep-alive monitoring**: 30s intervals
+- **Auto-restart**: Service restarts on failure
+
+### Fulcrum Security
+- **No P2P peering**: `peering = false`
+- **Local RPC only**: Bitcoin RPC on localhost
+- **SSL certificates**: Self-signed for local SSL
+- **Firewall**: Only necessary ports exposed
+
+### Network Security
+- **Local binding**: Bitcoin RPC bound to localhost only
+- **Tunnel only**: External access only via SSH tunnel
+- **VPS proxy**: Public access through VPS reverse proxy
+
+## 📊 **Performance Metrics**
+
+### Current Resource Usage
+```
+Total System Memory: ~50GB+
+Bitcoin Core: 11.7GB
+Fulcrum: 13.9GB
+System + Other: ~20GB
+Disk Usage: 1TB+ (blockchain + fulcrum DB)
+```
+
+### Expected Performance
+- **Sync Status**: Fully synced and operational
+- **Query Response**: ~100-500ms for standard requests
+- **Memory Growth**: Fulcrum DB grows ~1GB per week
+- **Uptime**: Services designed for 24/7 operation
+
+## 🚨 **Troubleshooting**
+
+### Common Issues
+1. **Fulcrum not responding**: Check Bitcoin Core RPC connection
+2. **Tunnel disconnected**: Check SSH keys and VPS connectivity
+3. **High memory usage**: Normal for Fulcrum with full database
+4. **Disk space**: Monitor `/home/oem/.fulcrum_db` growth
+
+### Emergency Recovery
+```bash
+# Restart all services
+sudo systemctl restart bitcoind fulcrum fulcrum-tunnel
+
+# Check service status
+systemctl status bitcoind fulcrum fulcrum-tunnel
+
+# View recent logs
+sudo journalctl -u fulcrum -n 50
+sudo journalctl -u fulcrum-tunnel -n 50
+```
+
+### Log Locations
+- **Fulcrum**: `/home/oem/.fulcrum/fulcrum.log`
+- **Bitcoin**: `/home/oem/.bitcoin/debug.log`  
+- **System logs**: `journalctl -u [service-name]`
+
+## 📈 **Maintenance Tasks**
+
+### Daily
+- Monitor service status with scripts
+- Check log files for errors
+- Verify tunnel connectivity
+
+### Weekly
+- Check disk space usage
+- Review Fulcrum sync status
+- Backup configuration files
+
+### Monthly
+- Update system packages
+- Review and rotate logs
+- Test emergency recovery procedures
+
+---
+
+**Server**: oem-NUC13ANH-B  
+**Last Updated**: September 14, 2025  
+**Services Status**: All operational ✅  
+**Tunnel Target**: `ubuntu@vm-374.lnvps.cloud`  
+**Public Domain**: `fulcrum.bittrade.co.in`
