@@ -257,3 +257,80 @@ curl -I https://fulcrum.bittrade.co.in
 **VPS Role**: SSL termination, tunnel endpoint, health monitoring  
 **Dependencies**: Home server SSH tunnel, Fulcrum server  
 **Wallet Connection**: `fulcrum.bittrade.co.in:443:s`
+
+## 🔄 Automated Daily Maintenance
+
+### Daily Service Restarts
+**Status**: ✅ **ACTIVE** - Configured on September 13, 2025
+
+The VPS is configured with automated daily service restarts to prevent connection issues and maintain optimal performance.
+
+#### Configuration
+```bash
+# Cron job (runs as root)
+0 3 * * * systemctl restart stunnel4 nginx && echo "$(date): Fulcrum services restarted" >> /var/log/fulcrum-maintenance.log
+```
+
+#### Schedule Details
+- **Time**: 3:00 AM UTC daily
+- **Services**: stunnel4 + nginx
+- **Duration**: ~2-3 seconds downtime
+- **Log File**: `/var/log/fulcrum-maintenance.log`
+- **Impact**: Minimal - wallets auto-reconnect
+
+#### Monitoring Commands
+```bash
+# Check if restarts are happening
+cat /var/log/fulcrum-maintenance.log
+
+# View current cron schedule
+sudo crontab -l
+
+# Check last restart time
+systemctl show stunnel4 --property=ActiveEnterTimestamp
+
+# Check service uptime
+systemctl status stunnel4 nginx --no-pager
+```
+
+#### Management Commands
+```bash
+# Edit restart schedule
+sudo crontab -e
+
+# Disable automated restarts
+sudo crontab -r
+
+# Manual restart (for testing)
+sudo systemctl restart stunnel4 nginx
+
+# Test cron job without waiting
+sudo systemctl restart stunnel4 nginx && echo "$(date): Manual test restart" >> /var/log/fulcrum-maintenance.log
+```
+
+#### Benefits
+- **Prevents SSL state corruption** that can build up over time
+- **Clears accumulated network socket issues**
+- **Refreshes SSL/TLS certificate loading**
+- **Maintains wallet connection reliability**
+- **Proactive maintenance** - fixes issues before they occur
+
+#### Troubleshooting
+```bash
+# If automated restarts aren't working:
+systemctl status cron                    # Check cron service
+sudo tail -f /var/log/syslog | grep cron # Watch cron execution
+sudo tail -20 /var/log/fulcrum-maintenance.log # Check restart history
+
+# If you need to change the time (example: 2:30 AM):
+sudo crontab -e
+# Change: 0 3 * * * to: 30 2 * * *
+```
+
+#### Why This Was Added
+On September 13, 2025, the VPS experienced connection issues where:
+- All services appeared healthy but wallets couldn't connect
+- SSL handshake errors accumulated in stunnel logs
+- A manual VPS restart completely resolved the issue
+- Daily restarts prevent this type of service state corruption
+
