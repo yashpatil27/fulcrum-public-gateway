@@ -7,7 +7,8 @@ This document covers the **VPS-side configuration** for the Fulcrum public gatew
 **Host**: `vm-374.lnvps.cloud`  
 **Domain**: `fulcrum.bittrade.co.in`  
 **User**: `ubuntu`  
-**OS**: Ubuntu 24.04
+**OS**: Ubuntu 24.04  
+**Public IP**: `185.18.221.146`
 
 ## 🏗️ Architecture
 
@@ -26,12 +27,14 @@ Home Server Fulcrum:50005
 - **Purpose**: SSL termination for Electrum clients
 - **Config**: `/etc/stunnel/fulcrum.conf`
 - **Forwards to**: localhost:50005
+- **Status**: ✅ **ACTIVE** - No rate limiting
 
 ### Nginx (Web Server)
 - **HTTP Port**: 8080 (redirects to HTTPS)
 - **HTTPS Port**: 8443 (health checks, proxy)
 - **Config**: `/etc/nginx/sites-enabled/fulcrum.bittrade.co.in`
 - **Purpose**: Health endpoints and management
+- **Status**: ✅ **ACTIVE** - **Rate limiting REMOVED** (Sept 14, 2025)
 
 ### SSH Tunnel Endpoint
 - **Port**: localhost:50005
@@ -42,6 +45,7 @@ Home Server Fulcrum:50005
 
 - **Domain**: fulcrum.bittrade.co.in
 - **Issuer**: Let's Encrypt
+- **Valid From**: August 17, 2025
 - **Expires**: November 15, 2025
 - **Auto-renewal**: Configured via certbot cron
 
@@ -60,6 +64,9 @@ echo '{"method":"server.version","params":["test","1.4"],"id":1}' | \
 
 # Check health endpoint
 curl -k https://fulcrum.bittrade.co.in:8443/health
+
+# Test from external perspective
+curl -I https://fulcrum.bittrade.co.in:8443/health
 ```
 
 ## 📋 Service Management
@@ -103,12 +110,78 @@ key = /etc/letsencrypt/live/fulcrum.bittrade.co.in/privkey.pem
 ```
 
 ### `/etc/nginx/sites-enabled/fulcrum.bittrade.co.in`
-Key features:
-- HTTP (8080) → HTTPS redirect
-- HTTPS (8443) with SSL certificates
-- Health endpoint at `/health`
-- Rate limiting (electrs zone)
-- Proxy to localhost:50005
+**Key Configuration Changes (September 14, 2025):**
+- ✅ **Rate limiting completely removed** for unlimited wallet connections
+- ✅ Clean configuration without electrs zones
+- ✅ Optimized for persistent Bitcoin wallet connections
+
+```nginx
+# Fulcrum Public Gateway Configuration
+server {
+    listen 8080;
+    server_name fulcrum.bittrade.co.in;
+    
+    # Redirect HTTP to HTTPS
+    return 301 https://$server_name$request_uri;
+}
+
+server {
+    listen 8443 ssl http2;
+    server_name fulcrum.bittrade.co.in;
+    
+    # SSL configuration (managed by certbot)
+    ssl_certificate /etc/letsencrypt/live/fulcrum.bittrade.co.in/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/fulcrum.bittrade.co.in/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+    
+    # Security headers
+    add_header Strict-Transport-Security "max-age=63072000" always;
+    add_header X-Frame-Options DENY;
+    add_header X-Content-Type-Options nosniff;
+    add_header X-XSS-Protection "1; mode=block";
+    
+    # Logging
+    access_log /var/log/nginx/fulcrum.bittrade.co.in.access.log;
+    error_log /var/log/nginx/fulcrum.bittrade.co.in.error.log;
+    
+    # Allow certbot to access .well-known for SSL certificate renewal
+    location /.well-known/acme-challenge/ {
+        root /var/www/html;
+        allow all;
+    }
+    
+    # Proxy configuration for fulcrum - NO RATE LIMITING
+    location / {
+        proxy_pass http://127.0.0.1:50005;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        
+        # WebSocket support (if needed)
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        
+        # Timeouts
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+        
+        # Buffer settings
+        proxy_buffering off;
+        proxy_request_buffering off;
+    }
+    
+    # Health check endpoint
+    location /health {
+        access_log off;
+        return 200 "Fulcrum Gateway OK\n";
+        add_header Content-Type text/plain;
+    }
+}
+```
 
 ## 🛡️ Security Configuration
 
@@ -117,7 +190,7 @@ Key features:
 # View current rules
 sudo ufw status
 
-# Allow necessary ports
+# Current allowed ports
 sudo ufw allow 22/tcp     # SSH
 sudo ufw allow 80/tcp     # HTTP (for certbot)
 sudo ufw allow 443/tcp    # HTTPS (stunnel)
@@ -125,10 +198,11 @@ sudo ufw allow 8080/tcp   # HTTP redirect
 sudo ufw allow 8443/tcp   # HTTPS proxy
 ```
 
-### Rate Limiting
-- **Zone**: electrs (defined in nginx.conf)
-- **Rate**: 10 requests per second
-- **Burst**: 20 requests
+### Rate Limiting Status
+- **Status**: ✅ **COMPLETELY DISABLED** (September 14, 2025)
+- **Reason**: Bitcoin wallets require persistent connections without limits
+- **Previous Issue**: 10 requests/second limit was causing connection drops
+- **Solution**: All rate limiting zones and rules removed from nginx
 
 ## 🔍 Troubleshooting
 
@@ -157,7 +231,7 @@ openssl s_client -connect fulcrum.bittrade.co.in:443 -servername fulcrum.bittrad
 ### Common Problems
 
 **"Connection refused on port 443"**
-- Stunnel4 not running: `sudo systemctl start stunnel4`
+- Stunnel4 not running: `sudo systemctl restart stunnel4`
 - Certificate issues: `sudo certbot renew`
 
 **"No response from server"**
@@ -168,6 +242,10 @@ openssl s_client -connect fulcrum.bittrade.co.in:443 -servername fulcrum.bittrad
 - Certificate expired: `sudo certbot renew && sudo systemctl reload stunnel4`
 - Wrong certificate path in stunnel config
 
+**"Wallet connection drops after initial connection"** ✅ **FIXED**
+- ~~Previous cause: nginx rate limiting~~ → **RESOLVED**
+- Solution: All rate limiting removed (Sept 14, 2025)
+
 ### Log Analysis
 ```bash
 # Recent stunnel connections
@@ -176,7 +254,7 @@ sudo tail -20 /var/log/stunnel4/stunnel.log
 # Look for SSL errors
 sudo journalctl -u stunnel4 --since "1 hour ago" | grep -E "(ERROR|WARN)"
 
-# Check nginx errors
+# Check nginx errors (should be minimal now)
 sudo tail -20 /var/log/nginx/fulcrum.bittrade.co.in.error.log
 ```
 
@@ -223,6 +301,13 @@ sudo certbot certificates | grep -A3 fulcrum
 # Test full chain
 echo '{"method":"server.features","params":[],"id":1}' | \
   openssl s_client -connect fulcrum.bittrade.co.in:443 -quiet 2>/dev/null
+
+# Test multiple connections (should all work now)
+for i in {1..5}; do
+  echo "Connection $i:"
+  echo '{"method":"server.version","params":["test","1.4"],"id":1}' | \
+    timeout 3 openssl s_client -connect fulcrum.bittrade.co.in:443 -quiet 2>/dev/null
+done
 ```
 
 ## 🚨 Emergency Procedures
@@ -241,6 +326,10 @@ sudo systemctl restart nginx
 # If tunnel connection lost
 # Check home server SSH tunnel status
 # Restart tunnel from home server
+
+# If wallets can't connect (post-Sept 14 fix)
+# Check service status - rate limiting no longer an issue
+sudo systemctl status stunnel4 nginx
 ```
 
 ### DNS Issues
@@ -249,14 +338,11 @@ sudo systemctl restart nginx
 dig fulcrum.bittrade.co.in
 nslookup fulcrum.bittrade.co.in
 
-# Test from external perspective
-curl -I https://fulcrum.bittrade.co.in
-```
+# Current IP should be: 185.18.221.146
 
----
-**VPS Role**: SSL termination, tunnel endpoint, health monitoring  
-**Dependencies**: Home server SSH tunnel, Fulcrum server  
-**Wallet Connection**: `fulcrum.bittrade.co.in:443:s`
+# Test from external perspective
+curl -I https://fulcrum.bittrade.co.in:8443/health
+```
 
 ## 🔄 Automated Daily Maintenance
 
@@ -327,10 +413,27 @@ sudo crontab -e
 # Change: 0 3 * * * to: 30 2 * * *
 ```
 
-#### Why This Was Added
-On September 13, 2025, the VPS experienced connection issues where:
-- All services appeared healthy but wallets couldn't connect
-- SSL handshake errors accumulated in stunnel logs
-- A manual VPS restart completely resolved the issue
-- Daily restarts prevent this type of service state corruption
+---
 
+## 📝 **Change Log**
+
+### September 14, 2025 - **MAJOR PERFORMANCE FIX** 🚀
+- ✅ **FIXED: Rate limiting issue causing wallet connection drops**
+- ✅ **REMOVED: All nginx rate limiting** (`limit_req zone=electrs`)  
+- ✅ **REMOVED: electrs rate limiting zone** (10r/s limit)
+- ✅ **OPTIMIZED: Configuration for unlimited Bitcoin wallet connections**
+- ✅ **VERIFIED: External connectivity working perfectly**
+- ✅ **STATUS: Multiple persistent wallet connections now supported**
+
+### September 13, 2025 - Initial Setup
+- ✅ **Automated daily maintenance** configured
+- ✅ **SSL certificates** configured and working
+- ✅ **SSH tunnel** established to home server
+- ✅ **Basic rate limiting** implemented (later removed)
+
+---
+
+**VPS Role**: SSL termination, tunnel endpoint, health monitoring  
+**Dependencies**: Home server SSH tunnel, Fulcrum server  
+**Wallet Connection**: `fulcrum.bittrade.co.in:443:s`  
+**Status**: ✅ **FULLY OPERATIONAL** - No connection limitations
