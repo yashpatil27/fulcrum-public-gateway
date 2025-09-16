@@ -33,7 +33,7 @@ fast-sync = 1000
 datadir = /home/oem/.fulcrum_db
 bitcoind = 127.0.0.1:8332
 ssl = 0.0.0.0:50002
-tcp = 0.0.0.0:50005
+tcp = 0.0.0.0:50001
 cert = /home/oem/.fulcrum/cert.pem
 key = /home/oem/.fulcrum/key.pem
 rpcuser = parman
@@ -74,7 +74,7 @@ Wants=network.target
 [Service]
 Type=simple
 User=oem
-ExecStart=/usr/bin/ssh -i /home/oem/.ssh/fulcrum_tunnel -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -o ExitOnForwardFailure=yes -N -R 50005:localhost:50005 ubuntu@vm-374.lnvps.cloud
+ExecStart=/usr/bin/ssh -i /home/oem/.ssh/fulcrum_tunnel -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -o ExitOnForwardFailure=yes -N -R 50005:localhost:50001 ubuntu@vm-374.lnvps.cloud
 Restart=always
 RestartSec=10
 StandardOutput=journal
@@ -88,7 +88,7 @@ WantedBy=multi-user.target
 - **VPS Host**: `vm-374.lnvps.cloud`
 - **VPS User**: `ubuntu`
 - **SSH Key**: `/home/oem/.ssh/fulcrum_tunnel`
-- **Port Forward**: VPS:50005 ← Home:50005
+- **Port Forward**: VPS:50001 ← Home:50001
 - **Keep-alive**: 30s intervals, 3 max failures
 
 ## 🪙 **Bitcoin Core Configuration**
@@ -227,7 +227,7 @@ echo '{"method":"server.version","params":["test","1.4"],"id":1}' | \
   openssl s_client -connect localhost:50002 -quiet 2>/dev/null
 
 # Check port bindings
-ss -tlnp | grep -E ':50002|:50005'
+ss -tlnp | grep -E ':50002|:50001'
 ```
 
 ### Tunnel Testing
@@ -253,14 +253,14 @@ top -p 2287,972329,1004417
 bitcoin-cli getblockchaininfo
 
 # Check network connections
-ss -an | grep -E ':8332|:50002|:50005'
+ss -an | grep -E ':8332|:50002|:50001'
 ```
 
 ## ⚙️ **Configuration Reference**
 
 ### Main Configuration (`config.env`)
 ```bash
-DOMAIN="fulcrum.bittrade.co.in"
+DOMAIN="fulcron.in"
 SSL_EMAIL="admin@bittrade.co.in"
 FULCRUM_PORT="50005"
 FULCRUM_SSL_PORT="50002"
@@ -358,7 +358,7 @@ sudo journalctl -u fulcrum-tunnel -n 50
 ---
 
 **Server**: oem-NUC13ANH-B  
-**Last Updated**: September 14, 2025  
+**Last Updated**: September 16, 2025  
 **Services Status**: All operational ✅  
 **Tunnel Target**: `ubuntu@vm-374.lnvps.cloud`  
-**Public Domain**: `fulcrum.bittrade.co.in`
+**Public Domain**: `fulcron.in`

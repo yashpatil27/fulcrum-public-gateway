@@ -16,23 +16,23 @@ This setup consists of two main components:
 - **OS**: Ubuntu 24.04
 - **Services**: Stunnel4 + Nginx
 - **Role**: SSL termination and public gateway
-- **Domain**: `fulcrum.bittrade.co.in`
+- **Domain**: `fulcron.in`
 
 ## 🔄 Architecture Flow
 
 ```
-Bitcoin Wallets → fulcrum.bittrade.co.in:443 (SSL)
+Bitcoin Wallets → fulcron.in:50002 (SSL)
     ↓ (Stunnel4 SSL Termination on VPS)
-VPS localhost:50005
+VPS localhost:50001
     ↓ (SSH Reverse Tunnel)
-Home Server Fulcrum:50005
+Home Server Fulcrum:50001
     ↓ (Local Connection)  
 Bitcoin Core (Full Node)
 ```
 
 ## 📱 Wallet Connection
 
-**Connection String**: `fulcrum.bittrade.co.in:443:s`
+**Connection String**: `fulcron.in:50002:s`
 
 Use this in any Electrum-compatible wallet:
 - Electrum Desktop/Mobile
@@ -91,7 +91,7 @@ nano config.env
 ```bash
 # Test Electrum protocol
 echo '{"method":"server.version","params":["test","1.4"],"id":1}' | \
-  openssl s_client -connect fulcrum.bittrade.co.in:443 -quiet 2>/dev/null
+  openssl s_client -connect fulcron.in:50002 -quiet 2>/dev/null
 ```
 
 ## ⚡ Quick Status Check
@@ -114,8 +114,8 @@ ss -tulpn | grep -E "(443|50005)"
 
 ### Main Configuration (`config.env`)
 ```bash
-DOMAIN="fulcrum.bittrade.co.in"       # Your domain
-SSL_EMAIL="admin@bittrade.co.in"      # Email for SSL certificates
+DOMAIN="fulcron.in"       # Your domain
+SSL_EMAIL="admin@fulcron.in"      # Email for SSL certificates
 FULCRUM_PORT="50005"                  # Fulcrum server port
 VPS_HOST="vm-374.lnvps.cloud"        # VPS hostname
 VPS_USER="ubuntu"                     # VPS username
@@ -123,7 +123,7 @@ VPS_USER="ubuntu"                     # VPS username
 
 ### Key Services
 - **Home**: Bitcoin Core (port 8332), Fulcrum (port 50005), SSH tunnel
-- **VPS**: Stunnel4 (port 443), Nginx (ports 8080/8443)
+- **VPS**: Stunnel4 (port 50002), Nginx (ports 8080/8443)
 
 ## 🔍 Troubleshooting
 
@@ -180,7 +180,7 @@ VPS_USER="ubuntu"                     # VPS username
 
 # Test wallet connection
 echo '{"method":"server.features","params":[],"id":1}' | \
-  openssl s_client -connect fulcrum.bittrade.co.in:443 -quiet 2>/dev/null
+  openssl s_client -connect fulcron.in:50002 -quiet 2>/dev/null
 
 # Check services
 systemctl status nginx stunnel4    # VPS
@@ -194,7 +194,7 @@ ps aux | grep fulcrum              # Home server
 - **VPS Configuration**: See [VPS-README.md](VPS-README.md)
 
 ### Quick Diagnostics
-1. **Connection Test**: Try connecting wallet to `fulcrum.bittrade.co.in:443:s`
+1. **Connection Test**: Try connecting wallet to `fulcron.in:50002:s`
 2. **Service Check**: Run `./vps-status-check.sh` on VPS
 3. **Tunnel Check**: Run `./scripts/tunnel-status.sh` on home server
 4. **Log Review**: Check stunnel and nginx logs for errors
@@ -202,8 +202,8 @@ ps aux | grep fulcrum              # Home server
 ---
 
 **Current Status**: ✅ Operational  
-**Domain**: fulcrum.bittrade.co.in:443:s  
-**Last Updated**: September 2025
+**Domain**: fulcron.in:50002:s  
+**Last Updated**: September 16, 2025
 
 **Components**:
 - Home Server: Bitcoin Core + Fulcrum (oem-NUC13ANH-B)

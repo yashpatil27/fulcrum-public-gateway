@@ -5,7 +5,7 @@ This document covers the **VPS-side configuration** for the Fulcrum public gatew
 ## 🌐 VPS Configuration
 
 **Host**: `srv1011358.hstgr.cloud`  
-**Domain**: `fulcrum.bittrade.co.in`  
+**Domain**: `fulcron.in`  
 **User**: `root`  
 **OS**: Ubuntu 24.04  
 **Public IP**: `31.97.62.114`  
@@ -14,11 +14,11 @@ This document covers the **VPS-side configuration** for the Fulcrum public gatew
 ## 🏗️ Architecture
 
 ```
-Bitcoin Wallets → fulcrum.bittrade.co.in:443 (SSL)
+Bitcoin Wallets → fulcron.in:50002 (SSL)
     ↓ (Stunnel4 SSL Termination)
-VPS localhost:50005
+VPS localhost:50001
     ↓ (SSH Reverse Tunnel from Home Server)
-Home Server Fulcrum:50005
+Home Server Fulcrum:50001
     ↓ (Direct Connection)
 Bitcoin Core RPC
 ```
@@ -26,7 +26,7 @@ Bitcoin Core RPC
 ## 📊 Health Monitoring
 
 ### Health Dashboard API
-**URL**: `https://fulcrum.bittrade.co.in:8443/health/`  
+**URL**: `https://fulcron.in:8443/health/`  
 **Format**: JSON response with full system status
 
 **Example Response:**
@@ -61,16 +61,16 @@ Bitcoin Core RPC
 ### Health Check Commands
 ```bash
 # Quick health check
-curl -s https://fulcrum.bittrade.co.in:8443/health/ | jq '.'
+curl -s https://fulcron.in:8443/health/ | jq '.'
 
 # Status only
-curl -s https://fulcrum.bittrade.co.in:8443/health/ | jq '.status'
+curl -s https://fulcron.in:8443/health/ | jq '.status'
 
 # Check specific services
-curl -s https://fulcrum.bittrade.co.in:8443/health/ | jq '.services'
+curl -s https://fulcron.in:8443/health/ | jq '.services'
 
 # Monitor uptime
-curl -s https://fulcrum.bittrade.co.in:8443/health/ | jq '.uptime.system.formatted'
+curl -s https://fulcron.in:8443/health/ | jq '.uptime.system.formatted'
 ```
 
 ### Health Monitoring Files
@@ -90,7 +90,7 @@ curl -s https://fulcrum.bittrade.co.in:8443/health/ | jq '.uptime.system.formatt
 ## 🔧 Services Overview
 
 ### Core Services
-- **stunnel4**: SSL termination on port 443
+- **stunnel4**: SSL termination on port 50002
 - **nginx**: HTTP redirect (80→443) and health monitoring (8443)
 - **SSH tunnel**: Reverse connection from home server
 - **certbot**: Automatic SSL certificate renewal
@@ -100,7 +100,7 @@ curl -s https://fulcrum.bittrade.co.in:8443/health/ | jq '.uptime.system.formatt
 ```bash
 # Check all services
 systemctl status stunnel4 nginx php8.3-fpm
-ss -tlnp | grep -E ':443|:80|:8443|:50005'
+ss -tlnp | grep -E ':50002|:80|:8443|:50001'
 
 # View logs
 journalctl -u stunnel4 -f
@@ -111,9 +111,9 @@ tail -f /var/log/nginx/access.log
 ## 🔐 SSL Certificate
 
 - **Provider**: Let's Encrypt
-- **Domain**: `fulcrum.bittrade.co.in`  
+- **Domain**: `fulcron.in`  
 - **Auto-renewal**: Enabled via certbot
-- **Certificate Path**: `/etc/letsencrypt/live/fulcrum.bittrade.co.in/`
+- **Certificate Path**: `/etc/letsencrypt/live/fulcron.in/`
 - **Expires**: 2025-12-14
 - **Used for**: Main service (443) and health monitoring (8443)
 
@@ -130,9 +130,9 @@ certbot renew --nginx
 ### Ports
 - **22**: SSH access
 - **80**: HTTP (redirects to HTTPS)
-- **443**: HTTPS/SSL (stunnel4)
+- **50002**: HTTPS/SSL (stunnel4)
 - **8443**: HTTPS health monitoring API
-- **50005**: SSH tunnel (localhost only)
+- **50001**: SSH tunnel (localhost only)
 
 ### Firewall
 ```bash
@@ -142,7 +142,7 @@ ufw status
 # If needed, allow ports
 ufw allow 22/tcp
 ufw allow 80/tcp  
-ufw allow 443/tcp
+ufw allow 50002/tcp
 ufw allow 8443/tcp
 ufw enable
 ```
@@ -157,10 +157,10 @@ pid = /var/run/stunnel4/stunnel.pid
 output = /var/log/stunnel4/stunnel.log
 
 [fulcrum-ssl]
-accept = 443
-connect = 127.0.0.1:50005
-cert = /etc/letsencrypt/live/fulcrum.bittrade.co.in/fullchain.pem
-key = /etc/letsencrypt/live/fulcrum.bittrade.co.in/privkey.pem
+accept = 50002
+connect = 127.0.0.1:50001
+cert = /etc/letsencrypt/live/fulcron.in/fullchain.pem
+key = /etc/letsencrypt/live/fulcron.in/privkey.pem
 ```
 
 ### nginx Config  
@@ -168,7 +168,7 @@ key = /etc/letsencrypt/live/fulcrum.bittrade.co.in/privkey.pem
 ```nginx
 server {
     listen 80;
-    server_name fulcrum.bittrade.co.in;
+    server_name fulcron.in;
     
     # Redirect HTTP to HTTPS
     return 301 https://$server_name$request_uri;
@@ -176,10 +176,10 @@ server {
 
 server {
     listen 8443 ssl http2;
-    server_name fulcrum.bittrade.co.in;
+    server_name fulcron.in;
     
-    ssl_certificate /etc/letsencrypt/live/fulcrum.bittrade.co.in/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/fulcrum.bittrade.co.in/privkey.pem;
+    ssl_certificate /etc/letsencrypt/live/fulcron.in/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/fulcron.in/privkey.pem;
     
     # Health monitoring endpoint
     location /health/ {
@@ -206,7 +206,7 @@ apt update && apt upgrade -y
 apt install -y nginx stunnel4 certbot python3-certbot-nginx php8.3-fpm php8.3-cli
 
 # Get SSL certificate
-certbot --nginx -d fulcrum.bittrade.co.in --non-interactive --agree-tos --email contact@bittrade.co.in
+certbot --nginx -d fulcron.in --non-interactive --agree-tos --email admin@fulcron.in
 
 # Configure and start services
 systemctl enable stunnel4 nginx php8.3-fpm
@@ -222,17 +222,17 @@ chown -R www-data:www-data /var/www/html/health
 ### Health Checks
 ```bash
 # System health (automated)
-curl -s https://fulcrum.bittrade.co.in:8443/health/ | jq '.status'
+curl -s https://fulcron.in:8443/health/ | jq '.status'
 
 # Test external connectivity
-nc -zv fulcrum.bittrade.co.in 443
+nc -zv fulcron.in 443
 
 # Test SSL handshake
-openssl s_client -connect fulcrum.bittrade.co.in:443 -servername fulcrum.bittrade.co.in
+openssl s_client -connect fulcron.in:50002 -servername fulcron.in
 
 # Test JSON-RPC through SSL
 echo '{"method":"server.version","params":[],"id":1}' | \
-openssl s_client -connect fulcrum.bittrade.co.in:443 -servername fulcrum.bittrade.co.in -quiet
+openssl s_client -connect fulcron.in:50002 -servername fulcron.in -quiet
 ```
 
 ### Expected Response
@@ -254,8 +254,8 @@ php /var/www/html/health/index.php
 
 **Port 443 in use:**
 ```bash
-# Check what's using port 443
-ss -tlnp | grep ':443'
+# Check what's using port 50002
+ss -tlnp | grep ':50002'
 # Stop conflicting service
 systemctl stop nginx
 systemctl start stunnel4
@@ -272,8 +272,8 @@ certbot renew --nginx --dry-run
 **SSH tunnel down:**
 ```bash
 # Check tunnel on VPS
-ss -tlnp | grep ':50005'
-# Should show sshd process listening on 127.0.0.1:50005
+ss -tlnp | grep ':50001'
+# Should show sshd process listening on 127.0.0.1:50001
 ```
 
 ## 📊 Performance Monitoring
@@ -281,15 +281,15 @@ ss -tlnp | grep ':50005'
 ### Response Time Testing
 ```bash
 # Network latency
-ping -c 5 fulcrum.bittrade.co.in
+ping -c 5 fulcron.in
 
 # SSL performance
 curl -w "DNS:%{time_namelookup}s TCP:%{time_connect}s SSL:%{time_appconnect}s Total:%{time_total}s\n" \
--s -o /dev/null https://fulcrum.bittrade.co.in:8443/health/
+-s -o /dev/null https://fulcron.in:8443/health/
 
 # JSON-RPC latency  
 time echo '{"method":"server.ping","params":[],"id":1}' | \
-openssl s_client -connect fulcrum.bittrade.co.in:443 -servername fulcrum.bittrade.co.in -quiet
+openssl s_client -connect fulcron.in:50002 -servername fulcron.in -quiet
 ```
 
 ### Automated Monitoring
@@ -297,7 +297,7 @@ openssl s_client -connect fulcrum.bittrade.co.in:443 -servername fulcrum.bittrad
 # Create monitoring script
 cat > /root/monitor.sh << 'SCRIPT'
 #!/bin/bash
-curl -s https://fulcrum.bittrade.co.in:8443/health/ | jq '.status' | grep -q "healthy" || \
+curl -s https://fulcron.in:8443/health/ | jq '.status' | grep -q "healthy" || \
 echo "ALERT: Fulcrum gateway unhealthy at $(date)" | mail -s "Fulcrum Alert" admin@bittrade.co.in
 SCRIPT
 
@@ -315,7 +315,7 @@ echo "*/5 * * * * /root/monitor.sh" | crontab -
 
 ## 🏆 Status: ✅ FULLY OPERATIONAL
 
-**Last Updated**: September 15, 2025  
+**Last Updated**: September 16, 2025  
 **Version**: 2.1 (Added Health Monitoring)  
 **Status**: Production Ready  
 **Performance**: A+ Grade  
@@ -323,4 +323,4 @@ echo "*/5 * * * * /root/monitor.sh" | crontab -
 
 ---
 
-*Your Fulcrum Bitcoin server is publicly accessible at `fulcrum.bittrade.co.in:443` with enterprise-grade SSL security, sub-50ms response times, and comprehensive health monitoring!* 🚀
+*Your Fulcrum Bitcoin server is publicly accessible at `fulcron.in:50002` with enterprise-grade SSL security, sub-50ms response times, and comprehensive health monitoring!* 🚀
