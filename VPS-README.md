@@ -26,13 +26,13 @@ Bitcoin Core RPC
 ## 📊 Health Monitoring
 
 ### Health Dashboard API
-**URL**: `https://fulcron.in:8443/health/`  
+**URL**: `https://fulcron.in/`  
 **Format**: JSON response with full system status
 
 **Example Response:**
 ```json
 {
-    "timestamp": "2025-09-15 19:19:56 UTC",
+    "timestamp": "2025-09-16 13:15:42 UTC",
     "status": "healthy",
     "services": {
         "stunnel4": true,
@@ -40,9 +40,10 @@ Bitcoin Core RPC
         "ssh_tunnel": true
     },
     "ports": {
+        "50002": true,
         "443": true,
         "80": true,
-        "50005": true
+        "50001": true
     },
     "connections": {
         "fulcrum_backend": true,
@@ -50,8 +51,8 @@ Bitcoin Core RPC
     },
     "uptime": {
         "system": {
-            "seconds": 3288,
-            "formatted": "0 days, 0 hours, 54 minutes"
+            "seconds": 67824,
+            "formatted": "0 days, 18 hours, 50 minutes"
         }
     },
     "message": "All systems operational"
@@ -61,22 +62,26 @@ Bitcoin Core RPC
 ### Health Check Commands
 ```bash
 # Quick health check
-curl -s https://fulcron.in:8443/health/ | jq '.'
+curl -s https://fulcron.in/ | jq '.status'
 
-# Status only
-curl -s https://fulcron.in:8443/health/ | jq '.status'
+# Full status
+curl -s https://fulcron.in/ | jq '.'
 
 # Check specific services
-curl -s https://fulcron.in:8443/health/ | jq '.services'
+curl -s https://fulcron.in/ | jq '.services'
 
 # Monitor uptime
-curl -s https://fulcron.in:8443/health/ | jq '.uptime.system.formatted'
+curl -s https://fulcron.in/ | jq '.uptime.system.formatted'
 ```
 
 ### Health Monitoring Files
 - **API Script**: `/var/www/html/health/index.php`
-- **Nginx Config**: `/etc/nginx/sites-available/health` (port 8443)
-- **SSL Cert**: Same as main service (Let's Encrypt)
+- **Nginx Config**: `/etc/nginx/sites-available/fulcron` (ports 443 & 80)
+- **SSL Cert**: Let's Encrypt for `fulcron.in`
+
+### Backward Compatibility
+- **Legacy URL**: `https://fulcron.in/health/` (still works)
+- **HTTP Redirect**: `http://fulcron.in` → `https://fulcron.in/`
 
 ## ⚡ Performance Metrics
 
@@ -91,8 +96,8 @@ curl -s https://fulcron.in:8443/health/ | jq '.uptime.system.formatted'
 
 ### Core Services
 - **stunnel4**: SSL termination on port 50002
-- **nginx**: HTTP redirect (80→443) and health monitoring (8443)
-- **SSH tunnel**: Reverse connection from home server
+- **nginx**: HTTP redirect (80→443) and health monitoring (443)
+- **SSH tunnel**: Reverse connection from home server (port 50001)
 - **certbot**: Automatic SSL certificate renewal
 - **php8.3-fpm**: Powers health monitoring API
 
@@ -100,7 +105,7 @@ curl -s https://fulcron.in:8443/health/ | jq '.uptime.system.formatted'
 ```bash
 # Check all services
 systemctl status stunnel4 nginx php8.3-fpm
-ss -tlnp | grep -E ':50002|:80|:8443|:50001'
+ss -tlnp | grep -E ':50002|:443|:80|:50001'
 
 # View logs
 journalctl -u stunnel4 -f
@@ -114,8 +119,8 @@ tail -f /var/log/nginx/access.log
 - **Domain**: `fulcron.in`  
 - **Auto-renewal**: Enabled via certbot
 - **Certificate Path**: `/etc/letsencrypt/live/fulcron.in/`
-- **Expires**: 2025-12-14
-- **Used for**: Main service (443) and health monitoring (8443)
+- **Expires**: 2025-12-15
+- **Used for**: Main service (50002), health monitoring (443), and HTTP redirect (80)
 
 ```bash
 # Check certificate status
@@ -130,8 +135,8 @@ certbot renew --nginx
 ### Ports
 - **22**: SSH access
 - **80**: HTTP (redirects to HTTPS)
-- **50002**: HTTPS/SSL (stunnel4)
-- **8443**: HTTPS health monitoring API
+- **443**: HTTPS health monitoring API
+- **50002**: Bitcoin Fulcrum SSL (stunnel4)
 - **50001**: SSH tunnel (localhost only)
 
 ### Firewall
@@ -142,21 +147,21 @@ ufw status
 # If needed, allow ports
 ufw allow 22/tcp
 ufw allow 80/tcp  
+ufw allow 443/tcp
 ufw allow 50002/tcp
-ufw allow 8443/tcp
 ufw enable
 ```
 
 ## 🔄 Configuration Files
 
 ### stunnel4 Config
-**File**: `/etc/stunnel/fulcrum.conf`
+**File**: `/etc/stunnel/fulcron.conf`
 ```conf
-# Fulcrum SSL Tunnel Configuration
+# Fulcron SSL Tunnel Configuration
 pid = /var/run/stunnel4/stunnel.pid
 output = /var/log/stunnel4/stunnel.log
 
-[fulcrum-ssl]
+[fulcron-ssl]
 accept = 50002
 connect = 127.0.0.1:50001
 cert = /etc/letsencrypt/live/fulcron.in/fullchain.pem
@@ -164,7 +169,7 @@ key = /etc/letsencrypt/live/fulcron.in/privkey.pem
 ```
 
 ### nginx Config  
-**File**: `/etc/nginx/sites-available/fulcrum`
+**File**: `/etc/nginx/sites-available/fulcron`
 ```nginx
 server {
     listen 80;
@@ -175,22 +180,34 @@ server {
 }
 
 server {
-    listen 8443 ssl http2;
+    listen 443 ssl http2;
     server_name fulcron.in;
     
     ssl_certificate /etc/letsencrypt/live/fulcron.in/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/fulcron.in/privkey.pem;
     
-    # Health monitoring endpoint
+    root /var/www/html;
+    index index.php index.html;
+    
+    # Root serves health API directly
+    location = / {
+        rewrite ^ /health/index.php last;
+    }
+    
+    # Health API directory (backward compatibility)
     location /health/ {
-        root /var/www/html;
-        index index.php;
-        try_files $uri $uri/ /health/index.php;
-        
-        location ~ \.php$ {
-            include snippets/fastcgi-php.conf;
-            fastcgi_pass unix:/var/run/php/php8.3-fpm.sock;
-        }
+        try_files $uri $uri/ =404;
+    }
+    
+    # PHP handling for health API
+    location ~ \.php$ {
+        include snippets/fastcgi-php.conf;
+        fastcgi_pass unix:/var/run/php/php8.3-fpm.sock;
+    }
+    
+    # Anything else redirects to health
+    location / {
+        return 301 /health/;
     }
 }
 ```
@@ -221,13 +238,17 @@ chown -R www-data:www-data /var/www/html/health
 
 ### Health Checks
 ```bash
-# System health (automated)
-curl -s https://fulcron.in:8443/health/ | jq '.status'
+# System health (primary endpoint)
+curl -s https://fulcron.in/ | jq '.status'
+
+# Legacy endpoint (backward compatibility)
+curl -s https://fulcron.in/health/ | jq '.status'
 
 # Test external connectivity
+nc -zv fulcron.in 50002
 nc -zv fulcron.in 443
 
-# Test SSL handshake
+# Test SSL handshake (Fulcrum)
 openssl s_client -connect fulcron.in:50002 -servername fulcron.in
 
 # Test JSON-RPC through SSL
@@ -235,7 +256,7 @@ echo '{"method":"server.version","params":[],"id":1}' | \
 openssl s_client -connect fulcron.in:50002 -servername fulcron.in -quiet
 ```
 
-### Expected Response
+### Expected Response (Fulcrum)
 ```json
 {"id":1,"jsonrpc":"2.0","result":["Fulcrum 1.9.8","1.4"]}
 ```
@@ -245,20 +266,18 @@ openssl s_client -connect fulcron.in:50002 -servername fulcron.in -quiet
 **Health endpoint returning errors:**
 ```bash
 # Check PHP-FPM status
-systemctl status php8.3-fpm
+systemctl status php8.3-fmp
 # Check nginx config
 nginx -t
 # Check health script
 php /var/www/html/health/index.php
 ```
 
-**Port 443 in use:**
+**Port 50002 in use:**
 ```bash
-# Check what's using port 50002
+# Check what's using the port
 ss -tlnp | grep ':50002'
-# Stop conflicting service
-systemctl stop nginx
-systemctl start stunnel4
+# Should show stunnel4 process listening
 ```
 
 **SSL certificate issues:**
@@ -283,11 +302,11 @@ ss -tlnp | grep ':50001'
 # Network latency
 ping -c 5 fulcron.in
 
-# SSL performance
+# Health API performance
 curl -w "DNS:%{time_namelookup}s TCP:%{time_connect}s SSL:%{time_appconnect}s Total:%{time_total}s\n" \
--s -o /dev/null https://fulcron.in:8443/health/
+-s -o /dev/null https://fulcron.in/
 
-# JSON-RPC latency  
+# JSON-RPC latency (Fulcrum)
 time echo '{"method":"server.ping","params":[],"id":1}' | \
 openssl s_client -connect fulcron.in:50002 -servername fulcron.in -quiet
 ```
@@ -297,8 +316,8 @@ openssl s_client -connect fulcron.in:50002 -servername fulcron.in -quiet
 # Create monitoring script
 cat > /root/monitor.sh << 'SCRIPT'
 #!/bin/bash
-curl -s https://fulcron.in:8443/health/ | jq '.status' | grep -q "healthy" || \
-echo "ALERT: Fulcrum gateway unhealthy at $(date)" | mail -s "Fulcrum Alert" admin@bittrade.co.in
+curl -s https://fulcron.in/ | jq '.status' | grep -q "healthy" || \
+echo "ALERT: Fulcron gateway unhealthy at $(date)" | mail -s "Fulcron Alert" admin@fulcron.in
 SCRIPT
 
 chmod +x /root/monitor.sh
@@ -309,18 +328,22 @@ echo "*/5 * * * * /root/monitor.sh" | crontab -
 
 ## 🔗 Related Documentation
 
-- [Home Server Setup](README.md)
-- [SSH Tunnel Configuration](SSH-TUNNEL.md)
-- [Troubleshooting Guide](TROUBLESHOOTING.md)
+- [Home Server Setup](HOME-SERVER-README.md)
+- [Main Project Documentation](README.md)
 
 ## 🏆 Status: ✅ FULLY OPERATIONAL
 
 **Last Updated**: September 16, 2025  
-**Version**: 2.1 (Added Health Monitoring)  
+**Version**: 3.0 (Health API at Root Domain)  
 **Status**: Production Ready  
 **Performance**: A+ Grade  
 **Monitoring**: 24/7 Health Checks  
 
+### Quick Access
+- **🌐 Health Dashboard**: `https://fulcron.in/`
+- **⚡ Bitcoin Connection**: `fulcron.in:50002:s`
+- **📊 Legacy Health**: `https://fulcron.in/health/` (backward compatible)
+
 ---
 
-*Your Fulcrum Bitcoin server is publicly accessible at `fulcron.in:50002` with enterprise-grade SSL security, sub-50ms response times, and comprehensive health monitoring!* 🚀
+*Your Fulcrum Bitcoin server is publicly accessible at `fulcron.in:50002:s` with enterprise-grade SSL security, sub-50ms response times, and clean health monitoring at the root domain!* 🚀
