@@ -57,10 +57,8 @@ fulcrum-public-gateway/
 │   └── setup.sh             # Home server setup script
 ├── vps/
 │   └── setup.sh             # VPS setup script
-└── scripts/                 # Management scripts
-    ├── tunnel-status.sh     # Check tunnel status
-    ├── vps-status.sh        # Check VPS services
-    └── [other scripts...]
+└── scripts/                 # Management script
+    └── quick-restart.sh     # Quick restart gateway services
 ```
 
 ## 🚀 Quick Start
@@ -99,7 +97,6 @@ echo '{"method":"server.version","params":["test","1.4"],"id":1}' | \
 ### Home Server Status
 ```bash
 # Check Fulcrum and tunnel
-./scripts/tunnel-status.sh
 ps aux | grep -E "(fulcrum|bitcoind)"
 ```
 
@@ -131,12 +128,10 @@ VPS_USER="ubuntu"                     # VPS username
 
 **Wallets can't connect**
 1. Check VPS services: `systemctl status nginx stunnel4`
-2. Check SSH tunnel: `./scripts/tunnel-status.sh`
 3. Check SSL certificate: `sudo certbot certificates`
 
 **SSH tunnel disconnects**
 1. Check home server internet connection
-2. Restart tunnel: `./scripts/tunnel-restart.sh`
 3. Check SSH key permissions
 
 **SSL certificate expired**
@@ -163,14 +158,14 @@ VPS_USER="ubuntu"                     # VPS username
 - Update system packages
 - Monitor service logs
 
-### Management Scripts
+### Management Script
 ```bash
-./scripts/tunnel-status.sh      # Check tunnel status
-./scripts/vps-status.sh         # Check VPS services  
-./scripts/tunnel-restart.sh     # Restart SSH tunnel
-./scripts/renew-ssl.sh          # Manual SSL renewal
-```
+# Navigate to project directory
+cd /home/oem/fulcrum-public-gateway/
 
+# Quick restart all gateway services (keeps Bitcoin Core & Fulcrum running)
+./scripts/quick-restart.sh
+```
 ## 📊 Monitoring
 
 ### Health Checks
@@ -196,7 +191,6 @@ ps aux | grep fulcrum              # Home server
 ### Quick Diagnostics
 1. **Connection Test**: Try connecting wallet to `fulcron.in:50002:s`
 2. **Service Check**: Run `./vps-status-check.sh` on VPS
-3. **Tunnel Check**: Run `./scripts/tunnel-status.sh` on home server
 4. **Log Review**: Check stunnel and nginx logs for errors
 
 ---
