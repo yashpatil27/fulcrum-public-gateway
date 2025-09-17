@@ -41,9 +41,14 @@ check_status "SSH tunnel restarted"
 # Give tunnel a moment to establish
 sleep 2
 
-# VPS: Restart SSL & web services via SSH
+# VPS: Restart SSL & web services via SSH with proper timeout and cleanup
 echo -e "${BLUE}☁️  Restarting VPS services...${NC}"
-ssh -i /home/oem/.ssh/fulcrum_tunnel -o ConnectTimeout=10 root@31.97.62.114 \
+timeout 30 ssh -i /home/oem/.ssh/fulcrum_tunnel \
+  -o ConnectTimeout=10 \
+  -o ServerAliveInterval=5 \
+  -o ServerAliveCountMax=2 \
+  -o BatchMode=yes \
+  root@31.97.62.114 \
   "systemctl restart stunnel4 nginx php8.3-fpm" 2>/dev/null
 check_status "VPS services restarted (stunnel4, nginx, php8.3-fpm)"
 
@@ -55,12 +60,15 @@ echo -e "${BLUE}🧪 Testing connectivity...${NC}"
 
 # Test 1: SSH tunnel connectivity
 echo -n "Testing SSH tunnel: "
-ssh -i /home/oem/.ssh/fulcrum_tunnel -o ConnectTimeout=5 root@31.97.62.114 "echo 'OK'" 2>/dev/null
+timeout 10 ssh -i /home/oem/.ssh/fulcrum_tunnel \
+  -o ConnectTimeout=5 \
+  -o BatchMode=yes \
+  root@31.97.62.114 "echo 'OK'" 2>/dev/null
 check_status "SSH tunnel working"
 
 # Test 2: Health API
 echo -n "Testing health API: "
-HEALTH_STATUS=$(curl -s --connect-timeout 10 https://fulcron.in/ 2>/dev/null | jq -r '.status' 2>/dev/null || echo "error")
+HEALTH_STATUS=$(timeout 15 curl -s --connect-timeout 10 https://fulcron.in/ 2>/dev/null | jq -r '.status' 2>/dev/null || echo "error")
 if [ "$HEALTH_STATUS" = "healthy" ]; then
     echo -e "${GREEN}✅ Health API responding (status: healthy)${NC}"
 else
@@ -70,7 +78,7 @@ fi
 # Test 3: SSL Bitcoin connection
 echo -n "Testing Bitcoin SSL connection: "
 BITCOIN_TEST=$(echo '{"method":"server.version","params":[],"id":1}' | \
-    timeout 10 openssl s_client -connect fulcron.in:50002 -quiet 2>/dev/null | \
+    timeout 15 openssl s_client -connect fulcron.in:50002 -quiet 2>/dev/null | \
     jq -r '.result[0]' 2>/dev/null || echo "error")
 
 if [[ "$BITCOIN_TEST" == *"Fulcrum"* ]]; then
